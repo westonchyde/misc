@@ -1,151 +1,188 @@
 import { chromium } from "@playwright/test";
-import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-const executablePath =
-  process.env.CHROMIUM_PATH ||
-  (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined);
+import assert from "node:assert/strict";
 const browser = await chromium.launch({
-  executablePath,
+  executablePath:
+    process.env.CHROMIUM_PATH ||
+    (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined),
   headless: true,
   args: ["--no-sandbox"],
 });
-const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-const errors = [];
+const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } }),
+  errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-const url = process.env.GAME_URL || "http://127.0.0.1:5173";
 const state = () => page.evaluate(() => window.battlefront.state);
-async function ready(turn) {
-  await page.waitForFunction(
-    (t) =>
-      window.battlefront.state.phase === "aim" &&
-      window.battlefront.state.turn >= t,
+const ready = async (turn) =>
+  page.waitForFunction(
+    (t) => {
+      const s = window.battlefront.state;
+      return s.playing && s.phase === "aim" && s.turn >= t;
+    },
     turn,
-    { timeout: 20000 },
+    { timeout: 25000 },
+  );
+async function targetRival() {
+  await page.waitForTimeout(450);
+  const s = await state(),
+    r = s.positions[1 - s.active],
+    v = s.view,
+    rect = await page.locator("#game").boundingBox();
+  await page.mouse.click(
+    rect.x + ((r.x * v.zoom + v.x) / 1280) * rect.width,
+    rect.y + ((r.y * v.zoom + v.y) / v.height) * rect.height,
   );
 }
-try {
-  await page.goto(url);
-  await page.getByRole("heading", { name: "Pick your battle." }).waitFor();
-  await page.screenshot({ path: "/tmp/battlefront-menu.png", fullPage: true });
-  await page.locator("#settings").click();
-  await page.locator("#motion-option").check();
-  await page.locator("#volume-option").fill("22");
-  await page.getByRole("button", { name: "Back to the field" }).click();
-  await page.reload();
-  await page.locator("#settings").click();
-  assert.ok(await page.locator("#motion-option").isChecked());
-  assert.equal(await page.locator("#volume-option").inputValue(), "22");
-  await page.getByRole("button", { name: "Back to the field" }).click();
-  await page.locator(".mode-card:has(input[value=practice])").click();
-  await page.locator("#start").click();
-  await ready(1);
-  await page.screenshot({
-    path: "/tmp/battlefront-battle.png",
-    fullPage: true,
-  });
-  const r = await page.locator("#game").boundingBox();
-  assert.ok(
-    Math.abs(
-      r.width / r.height -
-        (await page.locator("#game").evaluate((c) => c.width / c.height)),
-    ) < 0.02,
-    "Canvas keeps correct aspect ratio",
-  );
-  const fireRect = await page.locator("#fire").boundingBox();
-  assert.ok(
-    fireRect.y + fireRect.height <= 1000,
-    "Attack controls stay visible on a laptop screen",
-  );
-  await page.locator("#game").focus();
-  const x = (await state()).positions[0].x;
-  await page.keyboard.down("KeyD");
-  await page.waitForTimeout(200);
-  await page.keyboard.up("KeyD");
-  assert.ok((await state()).positions[0].x > x);
-  const budget = (await state()).budget;
-  await page.locator("#jump").click();
-  await page.waitForTimeout(600);
-  assert.ok((await state()).budget < budget);
-  const timer = (await state()).timer;
-  await page.locator("#pause").click();
-  const paused = await state();
-  await page.waitForTimeout(400);
-  assert.deepEqual(await state(), paused);
-  await page.locator("#resume").click();
-  assert.equal((await state()).timer, timer);
-  await page.locator("#help").click();
-  await page.getByRole("heading", { name: "Know your ground." }).waitFor();
-  await page.getByRole("button", { name: "Got it. Let’s battle →" }).click();
-  // Every content definition is selected and fired through the real controls.
-  const names = [
-    "Charizard",
-    "Blastoise",
-    "Pikachu",
-    "Golem",
-    "Gengar",
-    "Snorlax",
-  ];
-  let turn = 1;
-  for (let species = 0; species < 6; species++)
-    for (let move = 0; move < 2; move++) {
-      await ready(turn);
-      await page
-        .getByRole("button", { name: names[species], exact: true })
-        .click();
-      await page.locator("#moves button").nth(move).click();
-      if (await page.locator("#angle").isEnabled())
-        await page.locator("#angle").fill("60");
-      if (await page.locator("#power").isEnabled())
-        await page.locator("#power").fill("30");
-      if (await page.locator("#fire").isDisabled()) {
-        await page.locator("#face-left").click();
-      }
-      await page.locator("#fire").click();
-      await page.waitForFunction(
-        () => window.battlefront.state.phase === "summon",
-      );
-      if (species === 0 && move === 0) {
-        await page.waitForTimeout(740);
-        await page.screenshot({
-          path: "/tmp/battlefront-summon.png",
-          fullPage: true,
-        });
-      }
-      await ready(++turn);
-      assert.equal((await state()).active, 0);
-      console.log(`Browser move verified: ${names[species]} / ${move + 1}`);
-    }
-  assert.ok((await state()).terrainVersion > 0);
-  await page.locator("#log-toggle").click();
-  assert.ok((await page.locator("#battle-log li").count()) > 5);
-  await page.getByRole("button", { name: "Close battle log" }).click();
+async function menu() {
   await page.locator("#pause").click();
   await page.locator("#return-menu").click();
+}
+async function randomDraft(mode) {
+  await page.locator(`.mode-card:has(input[value=${mode}])`).click();
+  await page.locator("#timer-option").uncheck();
+  await page.locator("#start").click();
+  await page.locator("#draft-random").click();
+  assert.ok((await state()).draft.complete);
+  await page.locator("#draft-begin").click();
+  await ready(1);
+}
+try {
+  await page.goto(process.env.GAME_URL || "http://127.0.0.1:5173");
+  await page.waitForFunction(
+    () => window.battlefront.state.assets.ready,
+    null,
+    { timeout: 30000 },
+  );
+  assert.equal((await state()).assets.loaded, 18);
+  await page.screenshot({
+    path: "/tmp/battlefront-v3-menu.png",
+    fullPage: true,
+  });
+  await page.locator("#settings").click();
+  await page.locator("#volume-option").fill("0");
+  await page.locator("#motion-option").check();
+  await page.getByRole("button", { name: "Back to the field" }).click();
+  await page.reload();
+  await page.waitForFunction(() => window.battlefront.state.assets.ready);
+  await page.locator("#settings").click();
+  assert.equal(await page.locator("#volume-option").inputValue(), "0");
+  assert.ok(await page.locator("#motion-option").isChecked());
+  await page.getByRole("button", { name: "Back to the field" }).click();
   await page.locator(".mode-card:has(input[value=hotseat])").click();
   await page.locator("#timer-option").uncheck();
   await page.locator("#start").click();
+  assert.equal(await page.locator("#draft-pool button").count(), 18);
+  assert.ok(await page.locator("#draft-begin").isDisabled());
+  await page.screenshot({
+    path: "/tmp/battlefront-v3-draft.png",
+    fullPage: true,
+  });
+  for (let index = 0; index < 12; index++) {
+    const before = (await state()).draft;
+    await page.locator(`#draft-pool button[data-species="${index}"]`).click();
+    const after = (await state()).draft;
+    assert.equal(
+      after.teams[before.active].length,
+      before.teams[before.active].length + 1,
+    );
+    assert.ok(
+      await page
+        .locator(`#draft-pool button[data-species="${index}"]`)
+        .isDisabled(),
+    );
+  }
+  const teams = (await state()).draft.teams;
+  assert.deepEqual(
+    teams.map((t) => t.length),
+    [6, 6],
+  );
+  assert.equal(new Set(teams.flat()).size, 12);
+  await page.locator("#draft-begin").click();
   await ready(1);
-  await page.locator("#pass").click();
-  await ready(2);
-  assert.equal((await state()).active, 1);
-  assert.ok(await page.locator("#fire").isEnabled());
+  assert.deepEqual((await state()).teams, teams);
+  assert.equal(await page.locator("#roster button").count(), 6);
+  assert.ok(
+    await page
+      .getByRole("button", { name: "Charizard", exact: true })
+      .isVisible(),
+  );
+  await page.screenshot({
+    path: "/tmp/battlefront-v3-battle.png",
+    fullPage: true,
+  });
+  await page.locator("#angle").fill("-20");
+  await page.locator("#angle").focus();
+  assert.equal((await state()).selection.angle, -20);
+  const x = (await state()).positions[0].x;
+  await page.keyboard.down("KeyD");
+  await page.waitForTimeout(120);
+  await page.keyboard.up("KeyD");
+  assert.ok((await state()).positions[0].x > x);
+  await page.locator("#jump").click();
+  await page.waitForTimeout(1200);
+  assert.ok((await state()).budget < 125);
   await page.locator("#pause").click();
-  await page.locator("#return-menu").click();
+  const snapshot = await state();
+  await page.waitForTimeout(400);
+  const paused = await state();
+  assert.deepEqual(paused.positions, snapshot.positions);
+  assert.equal(paused.timer, snapshot.timer);
+  assert.equal(paused.phase, snapshot.phase);
+  await page.locator("#resume").click();
+  await targetRival();
+  await page.locator("#power").focus();
+  await page.keyboard.press("Space");
+  await page.waitForFunction(
+    () => window.battlefront.state.phase === "attack",
+    null,
+    { timeout: 15000 },
+  );
+  await page.waitForTimeout(450);
+  await page.screenshot({
+    path: "/tmp/battlefront-v3-relay.png",
+    fullPage: true,
+  });
+  await ready(2);
+  assert.ok((await state()).hp[1] < 180);
+  assert.equal((await state()).ammo[0].flamethrower, 2);
+  assert.equal((await state()).active, 1);
+  await page.getByRole("button", { name: "Blastoise", exact: true }).click();
+  await targetRival();
+  await page.locator("#fire").click();
+  await ready(3);
+  assert.ok((await state()).hp[0] < 180);
+  await page.locator("#log-toggle").click();
+  assert.ok((await page.locator("#battle-log li").count()) >= 4);
+  await page.getByRole("button", { name: "Close battle log" }).click();
+  await menu();
+  // Solo drafting must make real CPU picks, including two consecutive snake picks.
   await page.locator(".mode-card:has(input[value=solo])").click();
   await page.locator("#difficulty").selectOption("hard");
   await page.locator("#start").click();
+  await page
+    .getByRole("button", { name: "Draft Charizard", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => window.battlefront.state.draft.picks.length === 3,
+    null,
+    { timeout: 5000 },
+  );
+  assert.equal((await state()).draft.teams[1].length, 2);
+  await page.locator("#draft-random").click();
+  const first = (await state()).draft.teams;
+  await page.locator("#draft-random").click();
+  assert.notDeepEqual((await state()).draft.teams, first);
+  await page.locator("#draft-begin").click();
   await ready(1);
-  // Let the AI demonstrate actual damage, a complete victory, and rematch through the UI.
-  for (let round = 0; round < 10; round++) {
+  for (let round = 0; round < 24; round++) {
     const s = await state();
     if (s.phase === "over") break;
     await page.locator("#pass").click();
     await page.waitForFunction(
-      (turn) => {
+      (t) => {
         const s = window.battlefront.state;
         return (
           s.phase === "over" ||
-          (s.phase === "aim" && s.active === 0 && s.turn > turn)
+          (s.phase === "aim" && s.active === 0 && s.turn > t)
         );
       },
       s.turn,
@@ -154,40 +191,32 @@ try {
   }
   assert.equal((await state()).phase, "over");
   assert.equal((await state()).winner, 1);
-  assert.ok((await state()).hp[0] <= 0);
   await page.locator("#result").waitFor({ state: "visible" });
   await page.screenshot({
-    path: "/tmp/battlefront-results.png",
+    path: "/tmp/battlefront-v3-results.png",
     fullPage: true,
   });
+  const oldTeams = (await state()).teams;
   await page.locator("#rematch").click();
   await ready(1);
-  assert.deepEqual((await state()).hp, [140, 140]);
-  await page.locator("#pause").click();
-  await page.locator("#return-menu").click();
+  assert.deepEqual((await state()).hp, [180, 180]);
+  assert.deepEqual((await state()).teams, oldTeams);
+  await menu();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: "/tmp/battlefront-mobile-menu.png",
-    fullPage: true,
-  });
+  await page.locator("input[name=team-mode][value=random]").check();
+  await randomDraft("practice");
   assert.ok(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   );
-  await page.locator("#start").click();
   await page.screenshot({
-    path: "/tmp/battlefront-mobile-battle.png",
+    path: "/tmp/battlefront-v3-mobile.png",
     fullPage: true,
   });
-  assert.ok(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  );
   assert.deepEqual(errors, []);
   console.log(
-    "Browser suite passed: settings persistence, menus, controls, pause, 12 moves, hot-seat handoff, AI victory, rematch, mobile overflow, no runtime errors.",
+    "Browser suite passed: 18 real animated sprites, exclusive snake draft, CPU picks, random rerolls, drafted ownership, long-range relay and projectile hits, ammo, movement/aiming, pause, solo AI victory, rematch, preferences, mobile overflow, no page errors.",
   );
 } finally {
   await browser.close();

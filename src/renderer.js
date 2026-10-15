@@ -1,7 +1,17 @@
 import { W, H, SEA, traceShot } from "./simulation.js";
-import { roster, maps } from "./content.js";
+import { roster, maps, BALLISTIC, REMOTE } from "./content.js";
 import { oval, shape, line, ball, creature, trainer } from "./art.js";
+import { drawProjectile, drawMoveImpact, drawBeam } from "./effects.js";
 
+function ringAura(c, x, y, r, color, t) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.arc(x, y, r + (t % 1) * 3, t * 3, t * 3 + Math.PI * 1.3);
+  c.stroke();
+  c.restore();
+}
 function canvas(w, h) {
   const el = document.createElement("canvas");
   el.width = w;
@@ -206,8 +216,18 @@ export class Renderer {
   event(e) {
     if (["damage", "combo"].includes(e.type))
       this.effects.push({ ...e, life: 1.35, max: 1.35 });
-    if (["impact", "splash", "wall", "summon"].includes(e.type)) {
-      this.effects.push({ ...e, radius: e.radius || 36, life: 0.7, max: 0.7 });
+    if (
+      ["impact", "splash", "wall", "summon", "arrival", "burst"].includes(
+        e.type,
+      )
+    ) {
+      this.effects.push({
+        ...e,
+        visual: e.type === "arrival" ? null : e.visual,
+        radius: e.type === "arrival" ? 30 : e.radius || 36,
+        life: e.visual ? 1.2 : 0.7,
+        max: e.visual ? 1.2 : 0.7,
+      });
       const n = this.prefs.reduced ? 10 : e.type === "impact" ? 36 : 18;
       for (let i = 0; i < n; i++) {
         const a = i * 2.39996,
@@ -341,105 +361,102 @@ export class Renderer {
     if (!this.prefs.guide || b.phase !== "aim") return;
     const c = this.c,
       m = roster[selection.species].moves[selection.move],
-      trace = traceShot(b, m, selection.angle, selection.power),
-      p = b.players[b.active];
+      trace = traceShot(b, m, selection.angle, selection.power);
     c.save();
     c.globalAlpha = 0.8;
-    if (["lob", "phase"].includes(m.kind)) {
+    if (BALLISTIC.has(m.kind)) {
       for (let i = 1; i < trace.points.length; i += 2) {
-        const q = trace.points[i];
-        if (q.y > 18)
-          oval(
-            c,
-            q.x,
-            q.y,
-            i % 4 === 1 ? 2.1 : 1.4,
-            i % 4 === 1 ? 2.1 : 1.4,
-            "#f9ffdf",
-          );
+        const p = trace.points[i];
+        oval(
+          c,
+          p.x,
+          p.y,
+          i % 4 === 1 ? 2 : 1.3,
+          i % 4 === 1 ? 2 : 1.3,
+          "#fff9d6",
+        );
       }
-    } else if (m.kind === "slam") {
-      c.setLineDash([4, 9]);
-      const start = { x: p.x, y: p.y - 20 };
-      c.beginPath();
-      c.moveTo(start.x, start.y);
-      c.quadraticCurveTo(
-        (start.x + trace.x) / 2,
-        Math.min(start.y, trace.y) - 180,
-        trace.x,
-        trace.y,
-      );
-      c.strokeStyle = "#effed2";
-      c.lineWidth = 1.5;
-      c.stroke();
-      c.setLineDash([]);
-    } else if (m.kind !== "wall") {
-      const [a, e] = trace.points;
+      if (m.kind === "salvo")
+        for (const sign of [-1, 1]) {
+          const side = traceShot(
+            b,
+            m,
+            selection.angle + ((sign * (m.count - 1)) / 2) * m.spread,
+            selection.power,
+          );
+          c.globalAlpha = 0.28;
+          for (let i = 1; i < side.points.length; i += 4) {
+            const p = side.points[i];
+            oval(c, p.x, p.y, 1.4, 1.4, m.color);
+          }
+          c.globalAlpha = 0.8;
+        }
+    } else {
+      const [a, z] = trace.points;
       c.setLineDash([5, 8]);
       line(
         c,
         [
           [a.x, a.y],
-          [e.x, e.y],
+          [z.x, z.y],
         ],
-        "#f1ffda",
-        1.5,
+        "#fffce2",
+        1.6,
       );
       c.setLineDash([]);
-      if (m.kind === "cone") {
-        const a2 = Math.atan2(e.y - a.y, e.x - a.x),
-          r = m.radius + 7;
-        line(
-          c,
-          [
-            [e.x - Math.sin(a2) * r, e.y + Math.cos(a2) * r],
-            [a.x, a.y],
-            [e.x + Math.sin(a2) * r, e.y - Math.cos(a2) * r],
-          ],
-          "#f1ffda66",
-          1,
-        );
-      }
     }
-    const ex = clamp(trace.x, 10, W - 10),
-      ey = clamp(trace.y, 18, SEA - 4),
-      color = trace.y >= SEA ? "#ffb09a" : "#f4ffcf";
-    c.strokeStyle = color;
-    c.lineWidth = 1.2;
+    const x = clamp(trace.x, 8, W - 8),
+      y = clamp(trace.y, 18, SEA - 3),
+      col =
+        trace.y >= SEA ||
+        Math.hypot(
+          trace.x - b.players[b.active].x,
+          trace.y - b.players[b.active].y,
+        ) <
+          m.radius + 32
+          ? "#ffb496"
+          : m.color;
+    c.strokeStyle = col;
+    c.lineWidth = 1.4;
     c.setLineDash([4, 5]);
-    c.beginPath();
-    c.ellipse(
-      ex,
-      ey,
-      Math.max(10, m.radius),
-      Math.max(7, m.radius * 0.45),
-      0,
-      0,
-      Math.PI * 2,
-    );
-    c.stroke();
+    const offsets = m.kind === "cluster" ? [-38, 0, 38] : [0];
+    for (const dx of offsets) {
+      c.beginPath();
+      c.ellipse(
+        x + dx,
+        y,
+        Math.max(12, m.radius),
+        Math.max(8, m.radius * 0.3),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      c.stroke();
+    }
     c.setLineDash([]);
     line(
       c,
       [
-        [ex - 7, ey],
-        [ex + 7, ey],
+        [x - 8, y],
+        [x + 8, y],
       ],
-      color,
+      "#fffbdc",
       1.5,
     );
     line(
       c,
       [
-        [ex, ey - 7],
-        [ex, ey + 7],
+        [x, y - 8],
+        [x, y + 8],
       ],
-      color,
+      "#fffbdc",
       1.5,
     );
-    if (m.kind === "wall") {
-      c.strokeStyle = "#e9f8bf99";
-      c.strokeRect(ex - 24, ey - 100, 48, 100);
+    if (REMOTE.has(m.kind)) {
+      c.font = "bold 9px system-ui";
+      c.textAlign = "center";
+      c.fillStyle = "#fffde6";
+      c.fillText("SUMMON HERE", x, y - 15);
     }
     c.restore();
   }
@@ -448,12 +465,24 @@ export class Renderer {
     if (!s || ["aim", "handoff", "over"].includes(b.phase)) return;
     const c = this.c,
       p = b.players[s.owner],
-      dir = Math.cos((s.angle * Math.PI) / 180) >= 0 ? 1 : -1;
+      m = b.currentMove,
+      dir = p.facing;
     let x = s.x,
       y = s.y,
-      scale = 0.86,
+      scale = 0.92,
       action = "idle",
       progress = 0;
+    if (s.remote && ["summon", "flight"].includes(b.phase)) {
+      if (b.phase === "summon")
+        ball(
+          c,
+          p.x + dir * 18,
+          p.y - 16 - Math.sin(b.phaseTime * 7) * 8,
+          1.1,
+          b.phaseTime * 5,
+        );
+      return;
+    }
     if (b.phase === "summon") {
       const t = b.phaseTime;
       if (t < 0.36) {
@@ -470,38 +499,59 @@ export class Renderer {
       if (t < 0.55) {
         const q = (t - 0.36) / 0.19;
         ball(c, s.x, s.y - 24, 0.8, 0, q);
-        oval(c, s.x, s.y - 25, 26 * q, 35 * q, "#f4ffdc55");
+        oval(c, s.x, s.y - 30, 30 * q, 40 * q, "#f4ffdf55");
       }
       scale *= clamp((t - 0.43) / 0.26, 0, 1);
-      action = t > 0.75 ? "attack" : "idle";
-      progress = (t - 0.75) / 0.4;
-      c.save();
-      c.globalAlpha = 0.35;
-      c.strokeStyle = s.species.color;
-      c.lineWidth = 3;
-      c.beginPath();
-      c.ellipse(s.x, s.y + 3, 40, 10, 0, 0, Math.PI * 2);
-      c.stroke();
-      c.restore();
+      action = t > 0.73 ? "attack" : "idle";
+      progress = (t - 0.73) / 0.3;
     }
     if (b.phase === "attack" || b.phase === "flight") {
       action = "attack";
       progress =
         b.phase === "attack"
           ? b.attack.progress
-          : Math.min(1, b.phaseTime / 0.7);
+          : Math.min(1, b.phaseTime / 0.8);
     }
-    if (b.phase === "attack" && b.currentMove.kind === "slam") {
+    if (b.phase === "attack" && b.attack.remote) {
       const q = b.attack.progress;
-      x = s.x + (b.attack.x - s.x) * q;
-      y = s.y + (b.attack.y - s.y) * q - Math.sin(q * Math.PI) * 210;
-      scale *= 1 + Math.sin(q * Math.PI) * 0.12;
-    }
-    if (b.phase === "attack" && b.currentMove.kind === "dig") {
-      const a = b.attack;
-      x = a.origin.x + (a.x - a.origin.x) * a.progress;
-      y = a.origin.y + 20;
-      scale *= 0.65;
+      scale *= clamp(q / 0.2, 0, 1);
+      if (q < 0.22) {
+        ball(c, s.x, s.y - 25, 0.8, 0, q / 0.22);
+        oval(
+          c,
+          s.x,
+          s.y - 40,
+          25 * (1 - q / 0.22),
+          35 * (1 - q / 0.22),
+          "#fff5dd88",
+        );
+      }
+      x -= dir * 35;
+      if (m.id === "body-slam") {
+        x = s.x;
+        y -= Math.max(0, 1 - q / 0.58) * 150;
+        scale *= 1 + Math.sin(q * Math.PI) * 0.15;
+      }
+      if (
+        ["dynamic-punch", "crunch", "x-scissor", "dragon-rush"].includes(m.id)
+      ) {
+        x =
+          s.x -
+          dir * Math.max(0, 1 - q / 0.58) * (m.id === "dragon-rush" ? 190 : 95);
+        y -= Math.max(0, 1 - q / 0.58) * (m.id === "dragon-rush" ? 150 : 35);
+      }
+      if (["psychic", "hurricane", "psyshock"].includes(m.id))
+        y -= Math.sin(q * Math.PI) * 25;
+      if (m.id === "dig") {
+        scale *= 0.85;
+        y += q > 0.6 ? (q - 0.6) * 90 : 0;
+      }
+      if (q > 0.2 && q < 0.58) {
+        c.save();
+        c.globalAlpha = 0.25;
+        oval(c, x, y - 55, 16 + q * 12, 16 + q * 12, m.color);
+        c.restore();
+      }
     }
     if (b.phase === "recall") {
       const q = clamp(1 - b.phaseTime / 0.45, 0, 1);
@@ -512,243 +562,79 @@ export class Renderer {
         c,
         [
           [p.x + dir * 14, p.y - 10],
-          [x, y - 35 * q],
+          [x, y - 40 * q],
         ],
         "#ffb9c2aa",
         3,
       );
-      ball(c, p.x + dir * 14, p.y - 10, 0.6);
+      ball(c, p.x + dir * 14, p.y - 10, 0.65);
     }
-    creature(c, s.species.id, x, y, scale, dir, b.clock, action, progress);
+    oval(c, x, y + 2, 37 * scale, 7 * scale, "#142d3e33");
+    creature(
+      c,
+      s.species.id,
+      x,
+      y,
+      scale,
+      dir,
+      this.prefs.reduced ? 0 : b.clock,
+      action,
+      progress,
+      m.visual,
+    );
     if (b.phase === "summon" && b.phaseTime > 0.5) {
       c.save();
-      c.globalAlpha = 0.65 * (1 - clamp((b.phaseTime - 0.5) / 0.45, 0, 1));
-      oval(c, x, y - 40, 30, 42, "#fffde7");
+      c.globalAlpha = 0.4 * (1 - clamp((b.phaseTime - 0.5) / 0.45, 0, 1));
+      oval(c, x, y - 45, 35, 48, "#fffde7");
       c.restore();
     }
   }
   beam(b) {
-    if (!b.attack || !["attack", "settle"].includes(b.phase)) return;
-    if (b.phase === "settle" && b.phaseTime > 0.2) return;
+    if (!b.attack || b.attack.remote || !["attack", "settle"].includes(b.phase))
+      return;
+    if (b.phase === "settle" && b.phaseTime > 0.18) return;
     const a = b.attack,
-      m = b.currentMove,
       c = this.c;
-    if (["wall", "slam"].includes(m.kind)) return;
-    const start = a.origin,
-      end = {
-        x: start.x + (a.x - start.x) * a.progress,
-        y: start.y + (a.y - start.y) * a.progress,
-      };
-    const dx = end.x - start.x,
-      dy = end.y - start.y,
-      length = Math.hypot(dx, dy),
-      nx = -dy / (length || 1),
-      ny = dx / (length || 1);
     c.save();
-    if (b.phase === "settle") c.globalAlpha = 1 - b.phaseTime / 0.2;
-    if (m.kind === "cone") {
-      const r = 7 + m.radius * a.progress;
-      shape(
-        c,
-        [
-          [start.x, start.y],
-          [end.x + nx * r, end.y + ny * r],
-          [end.x - nx * r, end.y - ny * r],
-        ],
-        "#ff9a3755",
-        null,
-      );
-      for (let i = 0; i < 25; i++) {
-        const q = (i / 25 + b.clock * 1.5) % 1,
-          spread = Math.sin(i * 17) * r * q;
-        oval(
-          c,
-          start.x + dx * q + nx * spread,
-          start.y + dy * q + ny * spread,
-          4 + q * 9,
-          3 + q * 7,
-          i % 3 ? "#ffaf45aa" : "#ffe998cc",
-        );
-      }
-    } else if (m.kind === "bolt") {
-      const pts = [[start.x, start.y]];
-      for (let t = 14; t < length; t += 18) {
-        const jitter = Math.sin(t * 1.3 + Math.floor(b.clock * 20)) * 9;
-        pts.push([
-          start.x + (dx * t) / length + nx * jitter,
-          start.y + (dy * t) / length + ny * jitter,
-        ]);
-      }
-      pts.push([end.x, end.y]);
-      line(c, pts, "#ffe97b55", 16);
-      line(c, pts, "#ffe86b", 5);
-      line(c, pts, "#ffffe9", 2);
-    } else if (m.kind === "dig") {
-      for (let i = 0; i < 10; i++)
-        oval(
-          c,
-          end.x + Math.sin(i * 17) * 23,
-          end.y + Math.cos(i * 7) * 18,
-          5,
-          4,
-          "#c8ad7bbb",
-        );
-      line(
-        c,
-        [
-          [start.x, start.y],
-          [end.x, end.y],
-        ],
-        "#c9a97233",
-        18,
-      );
-    } else {
-      line(
-        c,
-        [
-          [start.x, start.y],
-          [end.x, end.y],
-        ],
-        m.kind === "ghost" ? "#b48bfa33" : "#81e6ff44",
-        m.radius * 2.5,
-      );
-      line(
-        c,
-        [
-          [start.x, start.y],
-          [end.x, end.y],
-        ],
-        m.color,
-        m.kind === "ghost" ? 5 : 10,
-      );
-      line(
-        c,
-        [
-          [start.x, start.y],
-          [end.x, end.y],
-        ],
-        "#f0ffffcc",
-        3,
-      );
-      for (let i = 0; i < 12; i++) {
-        const q = (i / 12 + b.clock * 1.3) % 1,
-          wave =
-            Math.sin(q * 30 + b.clock * 15) * (m.kind === "ghost" ? 12 : 6);
-        oval(
-          c,
-          start.x + dx * q + nx * wave,
-          start.y + dy * q + ny * wave,
-          5,
-          3,
-          m.color,
-        );
-      }
-    }
+    if (b.phase === "settle") c.globalAlpha = 1 - b.phaseTime / 0.18;
+    const end = {
+      x: a.origin.x + (a.x - a.origin.x) * a.progress,
+      y: a.origin.y + (a.y - a.origin.y) * a.progress,
+    };
+    drawBeam(c, b.currentMove, a.origin, end, b.clock, a.progress);
     c.restore();
   }
   projectile(b) {
-    const p = b.projectile;
-    if (!p) return;
+    if (!b.projectiles.length) return;
     const c = this.c,
       m = b.currentMove;
-    this.trail.push({ x: p.x, y: p.y, life: 0.27 });
-    for (const t of this.trail) {
-      c.globalAlpha = t.life * 1.8;
-      oval(c, t.x, t.y, 5 * t.life + 2, 5 * t.life + 2, m.color);
-    }
-    c.globalAlpha = 1;
-    const x = clamp(p.x, 8, W - 8),
-      y = Math.max((14 - this.view.y) / this.view.zoom, p.y);
-    if (p.y < (8 - this.view.y) / this.view.zoom) {
-      shape(
-        c,
-        [
-          [x - 6, y + 3],
-          [x, y - 7],
-          [x + 6, y + 3],
-        ],
-        m.color,
-        "#253649",
-        1,
-      );
-      return;
-    }
-    c.save();
-    c.translate(x, y);
-    c.rotate(p.age * 5);
-    if (m.id === "boulder") {
-      shape(
-        c,
-        [
-          [-14, -7],
-          [-7, -16],
-          [8, -14],
-          [17, -1],
-          [10, 12],
-          [-5, 15],
-          [-16, 5],
-        ],
-        "#b7a180",
-        "#45505a",
-        3,
-      );
-      line(
-        c,
-        [
-          [-9, -6],
-          [0, -1],
-          [8, -11],
-        ],
-        "#766e60",
-        2,
-      );
-      line(
-        c,
-        [
-          [0, -1],
-          [4, 10],
-        ],
-        "#766e60",
-        2,
-      );
-    } else if (m.effect === "wet") {
-      oval(c, 0, 0, 12, 12, "#7cdeef", "#e2ffff", 2);
-      oval(c, -4, -4, 4, 3, "#e8ffff");
-    } else if (m.effect === "electric") {
-      oval(c, 0, 0, 10, 10, "#ffe761", "#fff9d5", 2);
-      for (let i = 0; i < 5; i++) {
-        c.rotate((Math.PI * 2) / 5);
-        line(
+    for (const p of b.projectiles) {
+      if (p.delay > 0) continue;
+      this.trail.push({ x: p.x, y: p.y, life: 0.25 });
+      const top = (12 - this.view.y) / this.view.zoom;
+      if (p.y < top) {
+        shape(
           c,
           [
-            [8, -1],
-            [18, -5],
-            [14, 2],
+            [p.x - 5, top + 6],
+            [p.x, top - 3],
+            [p.x + 5, top + 6],
           ],
-          "#fff3ac",
-          2,
+          m.color,
+          null,
         );
+        continue;
       }
-    } else if (m.effect === "curse") {
-      oval(c, 0, 0, 15, 15, "#a175dd44");
-      oval(c, 0, 0, 10, 10, "#624a96", "#d5b7ff", 2);
-      line(
-        c,
-        [
-          [-8, 0],
-          [-2, -8],
-          [8, 0],
-          [1, 7],
-        ],
-        "#c5a0f7",
-        2,
-      );
-    } else {
-      oval(c, 0, 0, 13, 13, "#ff8b37aa");
-      oval(c, 0, 0, 9, 9, "#ffd25d");
-      oval(c, -2, -1, 4, 4, "#fff8c3");
+      if (REMOTE.has(m.kind)) {
+        ball(c, p.x, p.y, 1.05, p.age * 8);
+        ringAura(c, p.x, p.y, 12, m.color, p.age);
+      } else drawProjectile(c, m, p.x, p.y, p.age, Math.atan2(p.vy, p.vx));
     }
-    c.restore();
+    for (const p of this.trail) {
+      c.globalAlpha = p.life * 1.3;
+      oval(c, p.x, p.y, 3, 3, m.color);
+    }
+    c.globalAlpha = 1;
   }
   worldPoint(x, y) {
     const v = this.view || { x: 0, y: 0, zoom: 1 };
@@ -903,6 +789,18 @@ export class Renderer {
         c.strokeText(text, e.x, e.y - 25 - q * 35);
         c.fillStyle = e.type === "combo" ? "#fff4a8" : "#fff5d6";
         c.fillText(text, e.x, e.y - 25 - q * 35);
+      } else if (e.visual) {
+        if (e.fragment) {
+          drawProjectile(
+            c,
+            { id: e.kind, visual: e.visual, color: e.color },
+            e.x,
+            e.y,
+            q * 2,
+          );
+          ringAura(c, e.x, e.y, e.radius * q, e.color, q);
+        } else
+          drawMoveImpact(c, e.visual, e.x, e.y, e.radius, q, 1, e.facing || 1);
       } else {
         const r = (e.radius || 35) * (0.4 + q * 1.1);
         oval(

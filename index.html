@@ -11,7 +11,7 @@
       <a href="#" id="brand" aria-label="Battlefront home"
         ><span class="brand-ball">◒</span
         ><span>BATTLEFRONT<small>POKÉMON · TRAINER ARENA</small></span></a
-      ><span class="version">FAN EDITION <i>02</i></span>
+      ><span class="version">FAN EDITION <i>03</i></span>
       <nav>
         <button id="help" class="quiet">? <span>Field guide</span></button
         ><button id="settings" class="quiet">⚙ <span>Settings</span></button
@@ -34,8 +34,8 @@
               </p>
               <h1>Small arena.<br /><em>Big rivalries.</em></h1>
               <p>
-                Six partners. Twelve ways to change the battlefield.<br />A
-                turn-based artillery adventure.
+                18 Pokémon. 36 moves. Draft your six.<br />A turn-based
+                artillery adventure.
               </p>
             </div>
             <div class="hero-caption">
@@ -46,7 +46,9 @@
           <div class="setup-panel">
             <p class="eyebrow">LET’S SETTLE THIS</p>
             <h2>Pick your battle.</h2>
-            <p class="muted intro">Everything you need for a good rivalry.</p>
+            <p class="muted intro">
+              Pick your partners before you pick your shots.
+            </p>
             <fieldset class="mode-picker">
               <legend>01 <span>WHO’S PLAYING?</span></legend>
               <label class="mode-card"
@@ -101,8 +103,26 @@
               ><input type="checkbox" id="timer-option" checked /> 45-second
               turns <span>off in practice</span></label
             >
-            <button id="start" class="primary large">
-              Enter the battlefield <span>→</span>
+            <fieldset class="team-mode-picker">
+              <legend>03 <span>BUILD YOUR LOADOUT</span></legend>
+              <label
+                ><input type="radio" name="team-mode" value="draft" checked />
+                Snake draft</label
+              ><label
+                ><input type="radio" name="team-mode" value="random" /> Random
+                teams</label
+              >
+              <p class="muted">
+                18 Pokémon in the pool. Six exclusive picks each. Two real moves
+                per partner.
+              </p>
+            </fieldset>
+            <p id="difficulty-description" class="muted"></p>
+            <p id="asset-status" role="status">
+              Loading original animated sprites…
+            </p>
+            <button id="start" class="primary large" disabled>
+              Draft your team <span>→</span>
             </button>
             <p class="setup-note">
               No downloads inside the game. No accounts. Just battle.
@@ -131,6 +151,44 @@
               turn.</span
             >
           </div>
+        </div>
+      </section>
+      <section id="draft-screen" hidden aria-label="Pokémon draft">
+        <div class="draft-heading">
+          <div>
+            <p class="eyebrow">18 POKÉMON / 36 MOVES / SIX PICKS EACH</p>
+            <h1>Your pick. Their problem.</h1>
+            <p class="muted">
+              A Pocket Tanks-style snake draft: Ember, River, River, Ember.
+              Every pick takes a Pokémon out of the shared pool.
+            </p>
+          </div>
+          <button id="draft-back" class="quiet">← Battle setup</button>
+        </div>
+        <div class="draft-teams">
+          <section>
+            <h2>● EMBER <span id="draft-count-0">0 / 6</span></h2>
+            <div id="draft-team-0" class="draft-slots"></div>
+          </section>
+          <section>
+            <h2>◆ RIVER <span id="draft-count-1">0 / 6</span></h2>
+            <div id="draft-team-1" class="draft-slots"></div>
+          </section>
+        </div>
+        <div class="draft-status">
+          <strong id="draft-turn" aria-live="polite"></strong
+          ><span id="draft-last"></span>
+        </div>
+        <div id="draft-pool"></div>
+        <div class="draft-actions">
+          <button id="draft-random">⚄ Randomize both teams</button
+          ><button id="draft-reset">Reset draft</button>
+          <p id="draft-help">
+            Choose a Pokémon to draft it. Both of its moves come with it.
+          </p>
+          <button id="draft-begin" class="primary" disabled>
+            Enter the battlefield →
+          </button>
         </div>
       </section>
       <section id="battle-screen" hidden aria-label="Trainer battle">
@@ -253,27 +311,30 @@
           <b>01</b>
           <h3>Move, then make your move.</h3>
           <p>
-            A/D moves, W jumps. Each turn gives 125 movement points and one
-            attack. A jump costs 18. Pick a partner with 1–6, then Q/E to choose
-            its move.
+            Draft six Pokémon from the shared pool first. A/D moves, W jumps.
+            Each turn gives 125 movement points and one attack. A jump costs 18.
+            Pick a partner with 1–6, then Q/E to choose its move.
           </p>
         </article>
         <article>
           <b>02</b>
           <h3>Aim with confidence.</h3>
           <p>
-            Click the field to aim or use the sliders. Flip direction with F.
-            Dots show the predicted arc; a ring marks the impact. Power changes
-            lobs and Heavy Slam, not beams. Space commits the attack.
+            Click a landing area to find an arc, or use the sliders for classic
+            manual aiming. Hold Shift while clicking for direct aim. Flip
+            direction with F. Dots show the predicted arc; a ring marks the
+            impact. Power changes arcs and relay landings, not beams. Space
+            commits the attack.
           </p>
         </article>
         <article>
           <b>03</b>
           <h3>Change the battlefield.</h3>
           <p>
-            Boulder opens huge craters. Hydro Pump pushes. Thunderbolt stops at
-            cover. Ghost attacks pass through it. Rock Wall builds cover. Dig
-            tunnels. Heavy Slam leaps to its marker.
+            Most moves use long-range arcs. Relay moves send a Poké Ball to its
+            landing marker, then summon there. Hydro Pump pushes, Earthquake
+            breaks ground, Dig tunnels, salvos spread and clusters rain down.
+            Three charged beams cross the whole arena.
           </p>
         </article>
         <article>
@@ -282,13 +343,15 @@
           <p>
             Water wets for two enemy turns and extinguishes burns. Electricity
             deals 50% more to wet trainers. Fire burns for 4 HP on each of two
-            turns. Curse halves the rival’s next movement budget. Strong moves
-            need a turn or two to recharge.
+            turns. Curse halves the rival’s next movement budget. Primaries have
+            three shots and secondaries two. Strong moves also recharge. Ice
+            slows wet targets; sludge poisons; Snarl weakens the next attack. If
+            all shots are exhausted, remaining HP decides the winner.
           </p>
         </article>
       </div>
       <p class="callout">
-        Trainers have 140 HP. Falls can hurt; the sea is fatal. Blast damage
+        Trainers have 180 HP. Falls can hurt; the sea is fatal. Blast damage
         fades with distance and is reduced by solid cover. Pokémon are summoned
         attackers and do not take damage in Trainer Battle.
       </p>
@@ -329,6 +392,15 @@
           ><strong>Trajectory guide</strong
           ><small>Preview arcs, beams and blast radii</small></span
         ><input id="guide-option" type="checkbox" checked
+      /></label>
+      <label class="setting-row"
+        ><span
+          ><strong>Click-to-target arcs</strong
+          ><small
+            >Click a landing area to find an arc. Shift-click uses manual
+            direction.</small
+          ></span
+        ><input id="targeting-option" type="checkbox" checked
       /></label>
       <p class="muted">
         Preferences save on this browser. Match state does not.

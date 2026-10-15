@@ -1,0 +1,149 @@
+{
+  "source_commit": "ba403973fdf9d0ac59175813861e6a1f8ed5020c",
+  "assets": [
+    {
+      "id": "charizard",
+      "dex": 6,
+      "file": "assets/pokemon/charizard.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/6.gif",
+      "sha256": "249c2b1d43cd5e3a00e7029b007aabef7559065c84ae8826a775614c42356c6a",
+      "bytes": 82587
+    },
+    {
+      "id": "blastoise",
+      "dex": 9,
+      "file": "assets/pokemon/blastoise.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/9.gif",
+      "sha256": "e162c02d4df892f8f659bf31b1dc442facbb1ba5ddc94f24093b6b4af9a1eddd",
+      "bytes": 121970
+    },
+    {
+      "id": "pikachu",
+      "dex": 25,
+      "file": "assets/pokemon/pikachu.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/25.gif",
+      "sha256": "0ddc94c6f8cd432e3fd8972b4eca2a7b72fbfaf130c1970726089feb6fdbacc0",
+      "bytes": 23958
+    },
+    {
+      "id": "golem",
+      "dex": 76,
+      "file": "assets/pokemon/golem.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/76.gif",
+      "sha256": "bc41b5266991fd4d0176042cec09344ba1e30560f77679ed2db45f4a41245074",
+      "bytes": 41933
+    },
+    {
+      "id": "gengar",
+      "dex": 94,
+      "file": "assets/pokemon/gengar.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/94.gif",
+      "sha256": "a6abb74d994fbc18581c519bfe047743c9523c3a30898c48d3536c3f3f0683ad",
+      "bytes": 24933
+    },
+    {
+      "id": "snorlax",
+      "dex": 143,
+      "file": "assets/pokemon/snorlax.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/143.gif",
+      "sha256": "e683340745db17b15a5c5d1844d0930e8103844ddf194bcc517a75b6d4f23991",
+      "bytes": 74941
+    },
+    {
+      "id": "venusaur",
+      "dex": 3,
+      "file": "assets/pokemon/venusaur.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/3.gif",
+      "sha256": "a93402714a0e8f5ee92a1b995c5e9f3a02034037efebc9c99b2f2b18cc03a4a3",
+      "bytes": 125309
+    },
+    {
+      "id": "alakazam",
+      "dex": 65,
+      "file": "assets/pokemon/alakazam.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/65.gif",
+      "sha256": "78e88c1ba3743cdb843cea86336494f907c4f1f82dd393189cd5e8ca78614716",
+      "bytes": 57961
+    },
+    {
+      "id": "machamp",
+      "dex": 68,
+      "file": "assets/pokemon/machamp.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/68.gif",
+      "sha256": "3d705be586538b4103bc757b3d93513dc55ff06b63dddf4ef041f531bceb8232",
+      "bytes": 49777
+    },
+    {
+      "id": "gyarados",
+      "dex": 130,
+      "file": "assets/pokemon/gyarados.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/130.gif",
+      "sha256": "aabf473658eb23dc43e546d0483c4cfcb3af6748dece6826ac8fcace42547e61",
+      "bytes": 72908
+    },
+    {
+      "id": "lapras",
+      "dex": 131,
+      "file": "assets/pokemon/lapras.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/131.gif",
+      "sha256": "7afeddf87a578e26555a57743fdc95fec0e70cae15cae46a5c75ef7d9ef8bede",
+      "bytes": 27308
+    },
+    {
+      "id": "dragonite",
+      "dex": 149,
+      "file": "assets/pokemon/dragonite.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/149.gif",
+      "sha256": "ea83358260bf2f2081c30b15c11f94cb7debd3f01cd724a9066d3bab5c8043e3",
+      "bytes": 52880
+    },
+    {
+      "id": "tyranitar",
+      "dex": 248,
+      "file": "assets/pokemon/tyranitar.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/248.gif",
+      "sha256": "741c57fa2eb2abf913b907a65e805e2b24ff4ddb9fa6d085f0b34a16c876196d",
+      "bytes": 40437
+    },
+    {
+      "id": "scizor",
+      "dex": 212,
+      "file": "assets/pokemon/scizor.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/212.gif",
+      "sha256": "527011c5cb81c49f44762cec5f9b04618d280d3923043fa90bce33176faab7e8",
+      "bytes": 50218
+    },
+    {
+      "id": "espeon",
+      "dex": 196,
+      "file": "assets/pokemon/espeon.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/196.gif",
+      "sha256": "f289f87864d09fae487c0a13efb88b002124e3fa61d7373d53b67b87bcd9b739",
+      "bytes": 32120
+    },
+    {
+      "id": "umbreon",
+      "dex": 197,
+      "file": "assets/pokemon/umbreon.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/197.gif",
+      "sha256": "d430508aa9db128b3a37ca402613c1d027958829288e2ba1acff79e326233aa3",
+      "bytes": 12368
+    },
+    {
+      "id": "typhlosion",
+      "dex": 157,
+      "file": "assets/pokemon/typhlosion.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/157.gif",
+      "sha256": "fc3dabf200a324cb92277ae158239a2c87515634d6643038def80dbd28d1aaec",
+      "bytes": 72156
+    },
+    {
+      "id": "garchomp",
+      "dex": 445,
+      "file": "assets/pokemon/garchomp.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/445.gif",
+      "sha256": "befc656ef0e04484da7f8a4554595bafbbc09ed5f7f16c16da32a5944fdf5223",
+      "bytes": 51874
+    }
+  ]
+}

@@ -1,17 +1,21 @@
 {
   "name": "battlefront",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build && node scripts/standalone.mjs",
     "test": "node --test",
-    "test:browser": "node checks/browser.mjs && node checks/ui-regressions.mjs",
-    "test:portable": "node checks/portable.mjs"
+    "test:browser": "node checks/browser.mjs && node checks/effects.mjs",
+    "test:portable": "node checks/portable.mjs",
+    "benchmark:ai": "node checks/ai-benchmark.mjs"
   },
   "devDependencies": {
-    "vite": "^6.1.0",
-    "@playwright/test": "^1.51.0"
+    "@playwright/test": "^1.51.0",
+    "vite": "^6.1.0"
+  },
+  "dependencies": {
+    "gifuct-js": "^2.1.2"
   }
 }

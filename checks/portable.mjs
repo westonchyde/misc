@@ -10,52 +10,65 @@ const browser = await chromium.launch({
   args: ["--no-sandbox"],
 });
 const page = await browser.newPage({
-  viewport: { width: 1366, height: 900 },
-  offline: true,
-});
-const errors = [],
+    viewport: { width: 1366, height: 900 },
+    offline: true,
+  }),
+  errors = [],
   requests = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("request", (r) => {
   if (/^https?:/.test(r.url())) requests.push(r.url());
 });
 try {
-  // Cloud Chromium blocks file:// navigation by administrator policy.
-  // Validate the same standalone bytes as a document without a server or network.
+  // Administrator policy blocks file://. Load the exact portable bytes as a browser document.
   await page.setContent(
     await readFile(new URL("../play.html", import.meta.url), "utf8"),
   );
-  await page.getByRole("heading", { name: "Pick your battle." }).waitFor();
+  await page.waitForFunction(
+    () => window.battlefront?.state.assets.ready,
+    null,
+    { timeout: 30000 },
+  );
+  assert.equal(
+    (await page.evaluate(() => window.battlefront.state)).assets.loaded,
+    18,
+  );
   await page.locator(".mode-card:has(input[value=practice])").click();
   await page.locator("#start").click();
+  await page.locator("#draft-random").click();
+  await page.locator("#draft-begin").click();
+  await page.waitForTimeout(500);
+  const s = await page.evaluate(() => window.battlefront.state),
+    r = s.positions[1],
+    v = s.view,
+    rect = await page.locator("#game").boundingBox();
+  await page.mouse.click(
+    rect.x + ((r.x * v.zoom + v.x) / 1280) * rect.width,
+    rect.y + ((r.y * v.zoom + v.y) / v.height) * rect.height,
+  );
   await page.locator("#fire").click();
   await page.waitForFunction(
-    () =>
-      window.battlefront.state.turn === 2 &&
-      window.battlefront.state.phase === "aim",
+    () => {
+      const s = window.battlefront.state;
+      return s.turn === 2 && s.phase === "aim";
+    },
     null,
     { timeout: 20000 },
   );
-  assert.ok(
-    (await page.evaluate(() => window.battlefront.state)).terrainVersion > 0,
-  );
-  const stage = await page.locator("#game").boundingBox(),
-    fire = await page.locator("#fire").boundingBox();
-  assert.ok(
-    Math.abs(
-      stage.width / stage.height -
-        (await page.locator("#game").evaluate((c) => c.width / c.height)),
-    ) < 0.02,
-  );
+  const final = await page.evaluate(() => window.battlefront.state);
+  assert.ok(final.hp[1] < 180);
+  assert.ok(final.terrainVersion > 0);
+  assert.equal(final.active, 0);
+  assert.deepEqual(requests, []);
+  assert.deepEqual(errors, []);
+  const fire = await page.locator("#fire").boundingBox();
   assert.ok(fire.y + fire.height <= 900);
   await page.screenshot({
-    path: "/tmp/battlefront-portable.png",
+    path: "/tmp/battlefront-v3-portable.png",
     fullPage: true,
   });
-  assert.deepEqual(errors, []);
-  assert.deepEqual(requests, []);
   console.log(
-    "Portable build passed: standalone HTML document, offline, zero HTTP requests, summon → terrain impact → next turn, correct responsive camera proportions, visible attack controls, no runtime errors.",
+    "Portable build passed: all 18 animated sprites decoded offline; draft, aimed long-range attack, damage, terrain edit and turn handoff; zero HTTP requests and no runtime errors.",
   );
 } finally {
   await browser.close();

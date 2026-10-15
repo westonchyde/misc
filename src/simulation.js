@@ -1,4 +1,4 @@
-import { roster } from "./content.js";
+import { roster, BALLISTIC, REMOTE } from "./content.js";
 export const W = 1280,
   H = 680,
   SEA = 632,
@@ -6,11 +6,12 @@ export const W = 1280,
   DT = 1 / 60,
   GRAVITY = 440;
 export const RULES = {
-  hp: 140,
+  hp: 180,
   movement: 125,
   turnTime: 45,
   jumpCost: 18,
   maxFallDamage: 35,
+  impulseScale: 0.58,
 };
 export function random(seed) {
   const rng = () => {
@@ -103,91 +104,92 @@ export function angleVector(angle) {
   return { x: Math.cos(a), y: -Math.sin(a) };
 }
 export function speedFor(power) {
-  return 240 + power * 4.2;
+  return 260 + power * 5.6;
 }
 export function originFor(player, angle) {
   const dir = Math.cos((angle * Math.PI) / 180) >= 0 ? 1 : -1;
   // Shared muzzle for preview and attacks; summons are visual actors, not extra colliders.
-  return { x: player.x + dir * 55, y: player.y - 25 };
+  return { x: player.x + dir * 55, y: player.y - 42 };
 }
-export function traceShot(battle, move, angle, power, owner = battle.active) {
+// One authoritative projectile integrator is used by previews, AI and live shots.
+export function advanceProjectile(battle, shot, move, owner) {
+  shot.age += DT;
+  shot.vx += battle.wind * DT;
+  shot.vy += GRAVITY * DT;
+  const steps = Math.max(1, Math.ceil((Math.hypot(shot.vx, shot.vy) * DT) / 3));
+  for (let i = 0; i < steps; i++) {
+    shot.x += (shot.vx * DT) / steps;
+    shot.y += (shot.vy * DT) / steps;
+    const rival = battle.players[1 - owner];
+    const direct =
+      rival.hp > 0 &&
+      Math.abs(rival.x - shot.x) < 12 &&
+      Math.abs(rival.y - shot.y) < 22;
+    const terrain =
+      battle.terrain.solid(shot.x, shot.y) &&
+      (move.kind !== "phase" || (shot.vy > 0 && shot.age > 0.2));
+    if (
+      direct ||
+      terrain ||
+      shot.y >= SEA ||
+      shot.x < 0 ||
+      shot.x > W ||
+      shot.age >= 9
+    )
+      return {
+        x: shot.x,
+        y: shot.y,
+        direct,
+        directIndex: direct ? 1 - owner : -1,
+      };
+  }
+  return null;
+}
+export function makeProjectile(player, angle, power, delay = 0) {
+  const o = originFor(player, angle),
+    d = angleVector(angle);
+  return {
+    ...o,
+    vx: d.x * speedFor(power),
+    vy: d.y * speedFor(power),
+    age: 0,
+    delay,
+  };
+}
+export function traceShot(
+  battle,
+  move,
+  angle,
+  power,
+  owner = battle.active,
+  samples = true,
+) {
   const p = battle.players[owner],
-    o = originFor(p, angle),
-    d = angleVector(angle),
-    points = [{ ...o }];
-  if (move.kind === "wall") {
-    const x = Math.max(55, Math.min(W - 55, p.x + Math.sign(d.x) * move.range));
-    return { points, x, y: battle.terrain.top(x), direct: false };
-  }
-  if (move.kind === "slam") {
-    const x = Math.max(
-      25,
-      Math.min(
-        W - 25,
-        p.x + Math.sign(d.x) * (70 + (power * (move.range - 70)) / 100),
-      ),
-    );
-    return { points, x, y: battle.terrain.top(x), direct: false };
-  }
-  if (["lob", "phase"].includes(move.kind)) {
-    let x = o.x,
-      y = o.y,
-      vx = d.x * speedFor(power),
-      vy = d.y * speedFor(power),
-      crossed = false;
+    o = originFor(p, angle);
+  if (BALLISTIC.has(move.kind)) {
+    const shot = makeProjectile(p, angle, power),
+      points = [{ ...o }];
     for (let tick = 0; tick < 540; tick++) {
-      vx += battle.wind * DT;
-      vy += GRAVITY * DT;
-      const steps = Math.max(1, Math.ceil((Math.hypot(vx, vy) * DT) / 3));
-      for (let s = 0; s < steps; s++) {
-        x += (vx * DT) / steps;
-        y += (vy * DT) / steps;
-        const rival = battle.players[1 - owner];
-        const direct =
-          rival.hp > 0 &&
-          Math.abs(rival.x - x) < 12 &&
-          Math.abs(rival.y - y) < 22;
-        const terrain = battle.terrain.solid(x, y);
-        if (y < o.y - 5) crossed = true;
-        // Spectral shots ignore terrain until descending to their starting level.
-        const phaseEnd =
-          move.kind === "phase" && crossed && vy > 0 && y >= o.y + 25;
-        if (
-          direct ||
-          (move.kind !== "phase" && terrain) ||
-          phaseEnd ||
-          y >= SEA ||
-          x < 0 ||
-          x > W
-        )
-          return {
-            points: [...points, { x, y }],
-            x,
-            y,
-            direct,
-            ticks: tick + 1,
-          };
-      }
-      if (tick % 4 === 0) points.push({ x, y });
+      const hit = advanceProjectile(battle, shot, move, owner);
+      if (hit)
+        return {
+          ...hit,
+          points: [...points, { x: hit.x, y: hit.y }],
+          ticks: tick + 1,
+        };
+      if (samples && tick % 4 === 0) points.push({ x: shot.x, y: shot.y });
     }
-    return { points, x, y, direct: false, ticks: 540 };
+    return { ...shot, points, direct: false, ticks: 540 };
   }
+  const d = angleVector(angle);
   let x = o.x,
     y = o.y;
-  if (move.kind === "dig") {
-    y = p.y + 20;
-    d.x = Math.sign(d.x);
-    d.y = 0;
-  }
-  const start = { x, y };
-  points[0] = start;
   for (let t = 0; t <= move.range; t += 4) {
-    x = start.x + d.x * t;
-    y = start.y + d.y * t;
-    if (move.kind === "bolt" && battle.terrain.solid(x, y)) break;
+    x = o.x + d.x * t;
+    y = o.y + d.y * t;
     if (x < 0 || x > W || y > SEA) break;
   }
-  return { points: [start, { x, y }], x, y, direct: true };
+  return { points: [o, { x, y }], x, y, direct: true };
 }
 export class Battle {
   constructor(options = {}) {
@@ -200,6 +202,24 @@ export class Battle {
       timer: true,
       ...options,
     };
+    const teams = this.options.teams || [
+      roster.slice(0, 6).map((_, i) => i),
+      roster.slice(0, 6).map((_, i) => i),
+    ];
+    if (
+      !Array.isArray(teams) ||
+      teams.length !== 2 ||
+      teams.some(
+        (team) =>
+          !Array.isArray(team) ||
+          team.length < 1 ||
+          team.length > 18 ||
+          new Set(team).size !== team.length ||
+          team.some((i) => !Number.isInteger(i) || !roster[i]),
+      )
+    )
+      throw new Error("Invalid drafted teams");
+    this.options.teams = teams.map((team) => [...team]);
     this.rng = random(this.options.seed + 19);
     this.terrain = new Terrain(this.options.seed, this.options.map);
     this.players = [260, 1020].map((x, i) => ({
@@ -215,6 +235,13 @@ export class Battle {
       grounded: true,
       facing: i ? -1 : 1,
       cooldowns: {},
+      team: [...teams[i]],
+      ammo: Object.fromEntries(
+        teams[i].flatMap((s) => roster[s].moves.map((m) => [m.id, m.ammo])),
+      ),
+      poison: 0,
+      chill: 0,
+      weaken: 0,
       damage: 0,
       hits: 0,
       shots: 0,
@@ -230,6 +257,8 @@ export class Battle {
     this.turn = 1;
     this.events = [];
     this.projectile = null;
+    this.projectiles = [];
+    this.pendingImpacts = [];
     this.clock = 0;
     this.wind = Math.round((this.rng() - 0.5) * 24);
     this.winner = null;
@@ -290,7 +319,13 @@ export class Battle {
   }
   available(speciesIndex, moveIndex, owner = this.active) {
     const m = roster[speciesIndex]?.moves[moveIndex];
-    return !!m && !(this.players[owner].cooldowns[m.id] > 0);
+    return (
+      !!m &&
+      !!this.players[owner] &&
+      this.players[owner].team.includes(speciesIndex) &&
+      this.players[owner].ammo[m.id] > 0 &&
+      !(this.players[owner].cooldowns[m.id] > 0)
+    );
   }
   commit(speciesIndex, moveIndex, angle, power) {
     if (
@@ -309,11 +344,6 @@ export class Battle {
     const p = this.players[this.active],
       species = roster[speciesIndex],
       m = species.moves[moveIndex];
-    if (m.kind === "wall") {
-      const t = traceShot(this, m, angle, power);
-      if (t.y >= SEA || this.players.some((q) => Math.abs(q.x - t.x) < 48))
-        return false;
-    }
     p.facing = Math.cos((angle * Math.PI) / 180) >= 0 ? 1 : -1;
     this.currentMove = m;
     this.setPhase("summon");
@@ -328,9 +358,11 @@ export class Battle {
       angle,
       power,
       owner: this.active,
+      remote: REMOTE.has(m.kind),
     };
     this.projectile = null;
     p.shots++;
+    p.ammo[m.id]--;
     p.cooldowns[m.id] = m.cooldown + 1;
     this.addLog(`${p.name} summoned ${species.name} · ${m.name}`);
     this.emit("summon", { x: o.x, y: p.y - 20, color: species.color });
@@ -343,17 +375,36 @@ export class Battle {
     this.setPhase("settle");
     return true;
   }
-  damagePlayer(index, amount, source, forceX = 0, forceY = 0, effect = null) {
+  damagePlayer(
+    index,
+    amount,
+    source,
+    forceX = 0,
+    forceY = 0,
+    effect = null,
+    periodic = false,
+  ) {
     const p = this.players[index];
     if (p.hp <= 0) return;
+    if (
+      !periodic &&
+      source !== null &&
+      source !== index &&
+      this.players[source].weaken
+    )
+      amount *= 0.8;
+    if (effect === "chill" && p.wet) {
+      amount += 8;
+      this.emit("combo", { x: p.x, y: p.y - 40, text: "WET + ICE!" });
+    }
     amount = Math.max(0, Math.round(amount));
     if (effect === "electric" && p.wet) {
       amount = Math.round(amount * 1.5);
       this.emit("combo", { x: p.x, y: p.y - 40, text: "WET + ELECTRIC!" });
     }
     p.hp = Math.max(0, p.hp - amount);
-    p.vx += forceX;
-    p.vy += forceY;
+    p.vx += forceX * RULES.impulseScale;
+    p.vy += forceY * RULES.impulseScale;
     p.hurt = 0.45;
     if (effect === "wet") {
       p.wet = 3;
@@ -361,6 +412,9 @@ export class Battle {
     }
     if (effect === "burn" && !p.wet) p.burn = 2;
     if (effect === "curse") p.curse = 1;
+    if (effect === "poison") p.poison = 2;
+    if (effect === "chill") p.chill = 1;
+    if (effect === "weaken") p.weaken = 2;
     if (source !== index && source !== null) {
       this.players[source].damage += amount;
       if (amount) this.players[source].hits++;
@@ -376,7 +430,11 @@ export class Battle {
         reach = move.radius + 32;
       if (p.hp <= 0 || d >= reach) continue;
       let scale = Math.max(0, 1 - Math.max(0, d - 15) / reach);
-      if (d > 32 && this.terrain.lineBlocked(x, y - 5, p.x, p.y - 8))
+      if (
+        d > 32 &&
+        !["seismic", "tunnel"].includes(move.pattern) &&
+        this.terrain.lineBlocked(x, y - 5, p.x, p.y - 8)
+      )
         scale *= 0.55;
       const damage = i === directIndex ? move.damage : move.damage * scale;
       this.damagePlayer(
@@ -386,37 +444,118 @@ export class Battle {
         Math.sign(p.x - x || this.players[this.active].facing) *
           move.force *
           scale,
-        -move.force * 0.7 * scale,
+        -move.force * (move.pattern === "lift" ? 1.35 : 0.7) * scale,
         move.effect,
       );
     }
-    this.terrain.circle(x, y, move.radius);
+    this.terrain.circle(x, y, move.terrainRadius ?? move.radius);
     this.emit("impact", {
       x,
       y,
       color: move.color,
       radius: move.radius,
       kind: move.id,
+      visual: move.visual,
+      fragment: !!move.fragment,
+      facing: this.players[this.active].facing,
     });
+  }
+  resolveImpact(x, y, m, directIndex = -1) {
+    if (m.kind === "cluster") {
+      const offsets = m.pattern === "meteor" ? [-62, 0, 62] : [-38, 0, 38];
+      offsets.forEach((dx, i) => {
+        const px = Math.max(4, Math.min(W - 4, x + dx));
+        this.pendingImpacts.push({
+          delay: 0.12 + i * 0.18,
+          x: px,
+          y: this.terrain.top(px, Math.max(0, y - 60)) - 2,
+          move: {
+            ...m,
+            kind: "fragment",
+            fragment: true,
+            damage: m.damage / 3,
+            radius: m.radius,
+            terrainRadius: m.radius * 0.7,
+          },
+          directIndex: -1,
+        });
+      });
+      this.emit("burst", {
+        x,
+        y,
+        color: m.color,
+        radius: m.radius,
+        kind: m.id,
+        visual: m.visual,
+      });
+      return;
+    }
+    const terrainRadius = [
+      "ring",
+      "seismic",
+      "lift",
+      "spikes",
+      "sweep",
+      "eruption",
+      "tunnel",
+    ].includes(m.pattern)
+      ? Math.min(40, m.radius)
+      : m.radius;
+    this.hit(x, y, { ...m, terrainRadius }, directIndex);
+    if (m.pattern === "cross")
+      for (const [dx, dy] of [
+        [-48, 0],
+        [48, 0],
+        [0, -48],
+        [0, 48],
+      ])
+        this.terrain.circle(x + dx, y + dy, 23);
+    if (m.pattern === "crosscut")
+      for (let t = -62; t <= 62; t += 5) {
+        this.terrain.circle(x + t, y + t, 13);
+        this.terrain.circle(x + t, y - t, 13);
+      }
+    if (m.pattern === "seismic" || m.pattern === "sweep")
+      for (let dx = -120; dx <= 120; dx += 22) {
+        const px = x + dx,
+          py = this.terrain.top(px, Math.max(0, y - 65));
+        this.terrain.circle(px, py + 3, 18);
+      }
+    if (m.pattern === "tunnel" || m.pattern === "eruption") {
+      for (let d = 0; d < 110; d += 9)
+        this.terrain.circle(x, y + d, m.pattern === "tunnel" ? 24 : 18);
+      if (m.pattern === "tunnel")
+        for (let dx = -65; dx <= 65; dx += 8)
+          this.terrain.circle(x + dx, y + 48, 20);
+    }
+    if (m.pattern === "spikes")
+      for (const dx of [-65, 65]) {
+        const px = x + dx,
+          py = this.terrain.top(px, Math.max(0, y - 70));
+        if (
+          py < SEA &&
+          !this.players.some((p) => p.hp > 0 && Math.abs(p.x - px) < 34)
+        )
+          for (let h = 0; h < 48; h += 8)
+            this.terrain.circle(px, py - h, Math.max(7, 18 - h * 0.2), 1);
+      }
   }
   launch() {
     const s = this.summon,
       m = this.currentMove,
-      p = this.players[this.active],
-      d = angleVector(s.angle),
-      o = originFor(p, s.angle);
-    this.emit("attack", { kind: m.kind, color: m.color });
-    if (["lob", "phase"].includes(m.kind)) {
-      const trace = traceShot(this, m, s.angle, s.power);
-      this.projectile = {
-        ...o,
-        vx: d.x * speedFor(s.power),
-        vy: d.y * speedFor(s.power),
-        age: 0,
-        targetY: o.y + 25,
-        crossed: false,
-        trace,
-      };
+      p = this.players[this.active];
+    this.emit("attack", { kind: m.kind, visual: m.visual, color: m.color });
+    if (BALLISTIC.has(m.kind)) {
+      const count = m.kind === "salvo" ? m.count : 1;
+      this.projectiles = Array.from({ length: count }, (_, i) =>
+        makeProjectile(
+          p,
+          s.angle + (i - (count - 1) / 2) * (m.spread || 0),
+          s.power,
+          i * 0.085,
+        ),
+      );
+      this.projectile = this.projectiles[0];
       this.setPhase("flight");
       return;
     }
@@ -426,70 +565,94 @@ export class Battle {
       origin: target.points[0],
       progress: 0,
       hit: [],
-      duration: m.kind === "slam" ? 1.05 : 0.65,
+      duration: m.id === "hyper-beam" ? 1.1 : 0.9,
+      resolved: false,
     };
     this.setPhase("attack");
   }
   advanceAttack() {
     const a = this.attack,
       m = this.currentMove,
-      p = this.players[this.active];
-    const prev = a.progress;
+      prev = a.progress;
     a.progress = Math.min(1, this.phaseTime / a.duration);
-    if (m.kind === "wall") {
-      if (!prev) {
-        if (a.y >= SEA || this.players.some((q) => Math.abs(q.x - a.x) < 48))
-          this.addLog("No room for a rock wall there.");
-        else {
-          for (let j = 0; j < 85; j += 7)
-            this.terrain.circle(a.x, a.y - j, 24, 1);
-          this.emit("wall", { x: a.x, y: a.y, color: m.color });
-        }
-      }
-    } else if (m.kind === "slam") {
-      if (a.progress === 1 && prev < 1) {
-        this.hit(a.x, a.y - 3, m);
-        this.summon.x = a.x;
-        this.summon.y = a.y;
+    if (a.remote) {
+      if (a.progress >= 0.58 && !a.resolved) {
+        a.resolved = true;
+        this.resolveImpact(a.x, a.y, m, a.directIndex);
       }
     } else {
-      const length = Math.hypot(a.x - a.origin.x, a.y - a.origin.y),
-        d = {
-          x: (a.x - a.origin.x) / (length || 1),
-          y: (a.y - a.origin.y) / (length || 1),
-        };
-      for (let t = prev * length; t <= a.progress * length; t += 3) {
-        const x = a.origin.x + d.x * t,
-          y = a.origin.y + d.y * t;
-        const radius =
-          m.kind === "cone" ? 7 + m.radius * (t / length) : m.radius;
-        for (let i = 0; i < 2; i++) {
-          if (i === this.active || a.hit.includes(i)) continue;
-          const q = this.players[i];
-          if (Math.hypot(q.x - x, q.y - y) < radius + 19) {
+      const len = Math.hypot(a.x - a.origin.x, a.y - a.origin.y),
+        dx = (a.x - a.origin.x) / (len || 1),
+        dy = (a.y - a.origin.y) / (len || 1);
+      for (let t = prev * len; t <= a.progress * len; t += 3) {
+        const x = a.origin.x + dx * t,
+          y = a.origin.y + dy * t;
+        for (let i = 0; i < 2; i++)
+          if (
+            i !== this.active &&
+            !a.hit.includes(i) &&
+            this.players[i].hp > 0 &&
+            Math.hypot(this.players[i].x - x, this.players[i].y - y) <
+              m.radius + 19
+          ) {
             this.damagePlayer(
               i,
               m.damage,
               this.active,
-              d.x * m.force,
-              Math.min(-35, d.y * m.force - 35),
+              dx * m.force,
+              Math.min(-35, dy * m.force - 35),
               m.effect,
             );
             a.hit.push(i);
           }
-        }
-        if (!["ghost", "bolt"].includes(m.kind))
-          this.terrain.circle(x, y, radius);
+        this.terrain.circle(x, y, m.radius);
       }
     }
-    if (a.progress === 1) {
-      if (m.kind === "dig") {
-        this.summon.x = a.x;
-        this.summon.y = this.terrain.top(a.x);
+    if (a.progress === 1) this.setPhase("settle");
+  }
+  advanceFlights() {
+    const m = this.currentMove,
+      alive = [];
+    for (const shot of this.projectiles) {
+      if (shot.delay > 0) {
+        shot.delay -= DT;
+        alive.push(shot);
+        continue;
       }
-      this.setPhase("settle");
-      this.emit("attackEnd");
+      const hit = advanceProjectile(this, shot, m, this.active);
+      if (!hit) {
+        alive.push(shot);
+        continue;
+      }
+      if (REMOTE.has(m.kind)) {
+        const y =
+          Math.min(SEA, this.terrain.top(hit.x, Math.max(0, hit.y - 12))) - 2;
+        this.attack = {
+          ...hit,
+          y,
+          origin: { x: this.summon.x, y: this.summon.y },
+          progress: 0,
+          duration: ["body-slam", "eruption", "dragon-rush"].includes(m.id)
+            ? 1.35
+            : 1.1,
+          remote: true,
+          resolved: false,
+        };
+        this.summon.x = hit.x;
+        this.summon.y = y;
+        this.emit("arrival", {
+          x: hit.x,
+          y: y - 30,
+          color: m.color,
+          visual: m.visual,
+        });
+        this.setPhase("attack");
+      } else this.resolveImpact(hit.x, hit.y, m, hit.directIndex);
+      this.emit("landing", { x: hit.x, y: hit.y, owner: this.active });
     }
+    this.projectiles = alive;
+    this.projectile = alive[0] || null;
+    if (this.phase === "flight" && !alive.length) this.setPhase("settle");
   }
   physics() {
     for (let index = 0; index < 2; index++) {
@@ -551,6 +714,14 @@ export class Battle {
     this.clock += DT;
     this.phaseTime += DT;
     this.physics();
+    const waiting = [];
+    for (const impact of this.pendingImpacts) {
+      impact.delay -= DT;
+      if (impact.delay <= 0)
+        this.hit(impact.x, impact.y, impact.move, impact.directIndex);
+      else waiting.push(impact);
+    }
+    this.pendingImpacts = waiting;
     if (this.phase === "aim") {
       if (this.checkVictory()) return;
       if (this.options.timer && this.options.mode !== "practice") {
@@ -558,48 +729,19 @@ export class Battle {
         if (this.timer <= 0) this.pass();
       }
     } else if (this.phase === "summon" && this.phaseTime >= 0.95) this.launch();
-    else if (this.phase === "flight") {
-      const b = this.projectile,
-        m = this.currentMove;
-      b.age += DT;
-      b.vx += this.wind * DT;
-      b.vy += GRAVITY * DT;
-      const n = Math.max(1, Math.ceil((Math.hypot(b.vx, b.vy) * DT) / 3));
-      for (let i = 0; i < n; i++) {
-        b.x += (b.vx * DT) / n;
-        b.y += (b.vy * DT) / n;
-        if (b.y < this.players[this.active].y - 27) b.crossed = true;
-        const rivalIndex = 1 - this.active,
-          rival = this.players[rivalIndex];
-        const direct =
-          rival.hp > 0 &&
-          Math.abs(rival.x - b.x) < 12 &&
-          Math.abs(rival.y - b.y) < 22;
-        const collide = m.kind !== "phase" && this.terrain.solid(b.x, b.y);
-        const endPhase =
-          m.kind === "phase" && b.crossed && b.vy > 0 && b.y >= b.targetY;
-        if (
-          direct ||
-          collide ||
-          endPhase ||
-          b.y > SEA ||
-          b.x < 0 ||
-          b.x > W ||
-          b.age > 9
-        ) {
-          this.hit(b.x, b.y, m, direct ? rivalIndex : -1);
-          this.projectile = null;
-          this.setPhase("settle");
-          break;
-        }
-      }
-    } else if (this.phase === "attack") this.advanceAttack();
+    else if (this.phase === "flight") this.advanceFlights();
+    else if (this.phase === "attack") this.advanceAttack();
     else if (this.phase === "settle") {
       const settled = this.players.every(
         (p) => p.hp <= 0 || (p.grounded && Math.abs(p.vx) < 1 && p.vy === 0),
       );
       this.stable = settled ? this.stable + DT : 0;
-      if (this.stable > 0.25 && this.phaseTime > 0.45) this.setPhase("recall");
+      if (
+        this.stable > 0.25 &&
+        this.phaseTime > 0.45 &&
+        !this.pendingImpacts.length
+      )
+        this.setPhase("recall");
       // Cancel only negligible numerical drift; never advance over a falling body.
       if (this.phaseTime > 10)
         for (const p of this.players)
@@ -621,18 +763,41 @@ export class Battle {
   }
   nextTurn() {
     if (this.checkVictory()) return;
+    if (
+      this.players.every((p) => Object.values(p.ammo).every((n) => n === 0))
+    ) {
+      this.winner =
+        this.players[0].hp === this.players[1].hp
+          ? -1
+          : this.players[0].hp > this.players[1].hp
+            ? 0
+            : 1;
+      this.addLog("All moves exhausted. Remaining HP decides the result.");
+      this.setPhase("over");
+      this.emit("victory");
+      return;
+    }
     this.active = this.options.mode === "practice" ? 0 : 1 - this.active;
     this.turn++;
     const p = this.players[this.active];
     for (const id of Object.keys(p.cooldowns))
       p.cooldowns[id] = Math.max(0, p.cooldowns[id] - 1);
     if (p.burn) {
-      this.damagePlayer(this.active, 4, 1 - this.active);
+      this.damagePlayer(this.active, 4, 1 - this.active, 0, 0, null, true);
       p.burn--;
       this.addLog(`${p.name} took 4 burn damage.`);
     }
+    if (p.poison) {
+      this.damagePlayer(this.active, 4, 1 - this.active, 0, 0, null, true);
+      p.poison--;
+      this.addLog(`${p.name} took 4 poison damage.`);
+    }
+    if (p.weaken) p.weaken--;
     if (p.wet) p.wet--;
-    this.budget = p.curse ? Math.round(RULES.movement / 2) : RULES.movement;
+    this.budget = Math.round(
+      RULES.movement * (p.curse ? 0.5 : p.chill ? 0.65 : 1),
+    );
+    p.chill = 0;
     p.curse = 0;
     if (this.checkVictory()) return;
     this.timer = RULES.turnTime;
@@ -661,7 +826,8 @@ export class Battle {
       budget: this.budget,
       timer: this.timer,
       random: this.rng.state,
-      projectile: this.projectile,
+      projectiles: this.projectiles,
+      pendingImpacts: this.pendingImpacts,
       attack: this.attack,
       summon: this.summon && {
         ...this.summon,

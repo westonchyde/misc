@@ -1,34 +1,42 @@
-# Fan Edition 02 — validation record
+# Draft Edition 03 — executed validation
 
-Validated in the actual cloud checkout with Node 24.19.0, npm 11.9.0, Vite 6.4.4 and system Chromium. This records executed checks, not a claim that the entire original roadmap is finished.
+Validated in the actual checkout with Node 24.19.0, npm 11.9.0, Vite 6.4.4 and system Chromium. The previous Fan Edition 02 report is superseded by this record.
 
-| Check | Outcome | Evidence |
+| Check | Result | What executed |
 | --- | --- | --- |
-| `npm test` | 26 passed, 0 failed, 0 skipped | All move delivery types, collision/support, falls, terrain creation/removal, status/cooldown rules, illegal commands, downhill aiming, timer/practice, death/draw, replay state hashes, AI completion on all three maps |
-| `node checks/browser.mjs` | Passed | Real UI selection and execution of all 12 moves; settings persistence; walking/jumping; pause freezes state; guide/log; hot-seat handoff; computer defeats player and opens results; rematch resets health; phone layout has no horizontal overflow; no page errors |
-| `node checks/ui-regressions.mjs` | Passed | Volume 0 survives reload; pointer aiming follows the responsive camera; movement and Space attack work after focusing a slider |
-| `npm run build` | Passed | Production `dist/` and approximately 84 KB self-contained `play.html`; no external runtime assets |
-| `npm run test:portable` | Passed | Exact standalone HTML bytes loaded into offline browser document; summon/terrain impact/turn handoff; zero HTTP requests, no runtime errors, correct responsive dimensions, attack controls visible at 1366×900 |
-| Visual review | Checked in Chromium | Menu, arena, summon, results, portable build and 390-pixel-wide mobile screens captured and inspected |
+| Frozen installation | Passed | `npm ci --cache /tmp/battlefront-npm` from the committed lockfile, including `gifuct-js` |
+| `npm test` | **31 passed; 0 failed/skipped** | Content, all 18 asset checksums, deterministic/exclusive teams, snake order, CPU picks, ownership/ammo/cooldowns, terrain/physics, status rules, supply exhaustion, relay timing, salvos/clusters, cover creation, replay hashes, AI completion and arc targeting |
+| Move reach subcases | **216 passed** | All 36 moves actually damage an opponent from each starting side on each of the three maps; surviving bodies remain collision-free after settling |
+| Browser gameplay | Passed | Sprite loading; manual exclusive draft; two consecutive CPU snake picks; random rerolls; six-member drafted HUD; long-range relay and projectile hits; ammo consumption; pointer/manual/keyboard aiming; jump/move; pause; logs; solo CPU victory; rematch with same teams; saved settings and no horizontal phone overflow; no page errors |
+| Visual/sprite catalog | Passed | All 36 effects render to different image hashes; all 18 sprites have multiple distinct composited GIF frames; catalog screenshot inspected |
+| Production build | Passed | `dist/` and standalone `play.html`, approximately 1.4 MB including embedded original sprite assets and library notices |
+| Offline portable document | Passed | All 18 sprites decode without HTTP; draft, aimed long-range attack, actual damage, terrain edit and next turn; zero HTTP requests and no runtime errors; attack button fits at 1366×900 |
+| Difficulty benchmark | **Ace 19 / Rookie 1 / 0 draws / 0 unfinished** | Twenty fixed seeded games, alternating Ace side, random nonoverlapping drafted teams, three maps, same legal commands/damage/HP/resources; 5–18 attack turns |
 
-The cloud Chromium administrator policy blocks `file://` navigation. The portable test uses `page.setContent` with the exact `play.html` bytes in offline mode. Actual double-click launch in a personal Mac browser, Safari/Firefox/Edge behavior, real touch devices, sound quality and human balance feedback remain manual validation. Do not describe those as tested.
+## Interpreting the evidence
 
-The AI completes seeded matches via the same `commit` and `step` rules used by people; three regression matches reach a real winner rather than timing out or being marked passed after zero turns. This does not establish optimal play or balance across every map seed.
+Reach tests search for a legal damaging shot using the actual simulation; they do not merely compare a nominal range number. Cover, bad aim, a falling trainer or terrain edited during an attack can still change a shot's result. The tests cover the selected default seed on all maps, not every possible generated layout.
 
-Animation/terrain edit workloads are bounded: fixed world mask, cached scenery, capped particles, bounded shot search and projectile lifetime. Extended FPS/memory/long-session profiling has not been completed. The renderer updates terrain while beams excavate it, so slower devices may need additional optimization.
+The benchmark is reproducible with `npm run benchmark:ai`. It demonstrates difficulty separation in that fixed regression set, not a universal 95% win rate or a completed human balance study. Difficulty changes drafting, search resolution/refinement, tactical weights, move selection, ammo conservation, movement and uncertainty. All levels use the same authoritative resource/physics/combat rules.
 
-## Resolved during this rebuild
+The custom effect catalog can be regenerated with `node checks/effects.mjs` against the dev server. The effects use original rendering/choreography around actual animated Pokémon sprites; these are not ripped official attack-animation sequences. Source GIFs are preserved with pinned source URLs, checksums and separate image ownership attribution.
 
-- Ambiguous absolute-angle controls replaced by facing plus elevation and pointer aiming.
-- Fixed-speed themed shots replaced by nine delivery mechanisms and explicit tactical/status rules.
-- Missing solo opponent replaced by command-based AI and tested end-to-end victory.
-- Small undifferentiated art replaced by six outlined procedural sprites, species-specific projectile visuals and summon/attack/recall choreography.
-- Terrain support/body collision and fall/sea outcomes now have regressions.
-- Control enabling now follows phase transitions immediately.
-- Keyboard input remains usable after interacting with sliders; zero volume remains zero after reload.
-- Laptop controls fit with a responsive world camera rather than stretching sprites.
-- Downloaded builds no longer require users to install Node or run a local server.
+## Issues found and fixed during this revision
 
-## Not delivered in this offline release
+- Short-range-only moves were unusable from default spawn distances: replaced them with full-map arcs and relay summons. Only three full-arena beams remain.
+- Invented move names and six shared unlimited partners: replaced with 36 real move names, 18 Pokémon, exclusive pre-match drafting and finite resources.
+- Difficulty was mostly aim jitter: added substantive search, tactical/resource/draft and movement differences, with measurable match outcomes.
+- A marginal Ice Beam solution could miss after aim uncertainty: added alignment scoring so fine search centers its beam.
+- Old knockback values became excessive when applied at full range: globally scaled impulses to 0.58, avoiding trivial early full-health ring-outs in the measured matches.
+- Re-entering a draft after a match exposed stale telemetry: draft/home state now follows the visible screen.
+- Relay attack effects initially appeared before emergence: arrival is now an opening flash; move effects follow attack resolution.
+- Snarl could weaken periodic burn/poison ticks: periodic damage now remains independent of attack weakening.
+- Pointer direction/power scaling made distant clicks overshoot badly: added optional actual-trajectory click-to-target search; classic manual controls remain available.
 
-Online networking/reconnection, editable team builder, persistent Pokémon Battle, broad terrain overlays/ice, campaign/progression, saved matches/replay UI, gamepad/remapping, licensed production assets, broad device certification and extended balance/performance testing. These remain documented future work, not hidden or nonfunctional menu choices.
+## Validation boundaries
+
+Cloud Chromium blocks direct `file://` navigation by administrator policy. The portable check loads the **exact standalone HTML bytes** into an offline browser document. Actual double-click launch on a personal Mac, Safari/Firefox/Edge behavior, audio quality, real touch devices, comprehensive accessibility review, human balancing, and extended memory/FPS/long-session performance are still manual checks.
+
+Vite's large-chunk advisory is expected because the portable deliverable embeds about 1 MB of original GIFs. The game caps composited frames and particles, caches terrain/backgrounds, shares trajectory calculations, and bounds AI candidate search; this does not establish a frame-rate guarantee on every device.
+
+Online networking/reconnect, persistent Pokémon Battle, global terrain ice/fire/wetness, campaign, saved matches/replay UI and controller/remapping remain future scope. Drafting and random teams are implemented, not placeholders.

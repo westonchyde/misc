@@ -1,5 +1,7 @@
 # Playability rebuild inventory
 
+Historical Fan Edition 02 acceptance list. Draft Edition 03 supersedes the sprite, roster and team-selection limits below; see ARTILLERY-REVISION.md for current rules.
+
 The first prototype runs, but execution alone is not a satisfying game. This is the acceptance inventory for the second playable milestone.
 
 ## Required in this rebuild
@@ -28,3 +30,7 @@ See README and the final validation report. This file records intended acceptanc
 Implemented: the offline match flow, three modes/maps, six animated procedural partners, twelve moves/nine delivery types, fixed-step physics and terrain, cooldowns/statuses, bounded AI, menus/HUD/log/results, pointer/keyboard/touch buttons, versioned preferences, synthesized audio and a self-contained downloadable game. Tests and limits are recorded in [VALIDATION.md](VALIDATION.md).
 
 Partially covered: sprites/attack poses are procedural fan art rather than production animation sheets; summon placements are presentation actors rather than independently colliding combatants; no expanded team editing; slow-device/long-session profiling and manual accessibility/cross-browser reviews remain outstanding. These limits do not block the tested offline match loop, but they matter for a production release.
+
+## Draft Edition 03 supersedes the original content limits
+
+The follow-up artillery revision expands the roster to 18 actual animated Pokémon sprites and 36 real moves; implements exclusive snake drafting and randomized teams; replaces close-range-only attacks with full-map arcs/relay summons; gives every move a distinct effect; and separates CPU difficulties through planning, drafting, tactics and resource choices. Editable arbitrary rosters, online play and persistent Pokémon remain future work. See [ARTILLERY-REVISION.md](ARTILLERY-REVISION.md) for the revised acceptance rules and [VALIDATION.md](VALIDATION.md) for executed evidence.
