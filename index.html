@@ -1,1 +1,374 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Battlefront • Trainer Arena</title></head><body><div id="app"><header><a class="brand" href="/">◓ <span>BATTLEFRONT<small>TRAINER ARENA</small></span></a><div class="badge">LOCAL HOT-SEAT · FAN PROTOTYPE</div><button id="help">How to play</button><button id="sound" aria-pressed="false">Sound off</button></header><main><div class="heading"><div><p class="eyebrow">THE VERDANT HIGHLANDS</p><h1>A little aim. A big impact.</h1></div><button id="restart">↻ New battle</button></div><section class="arena" aria-label="Battlefield"><canvas id="game" width="1200" height="620" aria-label="Destructible battlefield, use controls below to play"></canvas><div class="top-hud"><div id="p0" class="player"></div><div id="turn"></div><div id="p1" class="player"></div></div><div id="announcement" role="status" aria-live="polite"></div><div class="arena-label">VERDANT HIGHLANDS <span>01 / TRAINER BATTLE</span></div></section><section class="console"><div class="team-area"><p class="eyebrow">01 / CHOOSE YOUR PARTNER</p><div id="roster"></div></div><div class="attack-area"><p class="eyebrow">02 / PICK YOUR MOVE</p><div id="moves"></div><p id="description"></p></div><div class="aim-area"><p class="eyebrow">03 / MAKE YOUR SHOT</p><label>Angle <input id="angle" type="range" min="10" max="170" value="48"><output id="angle-value">48°</output></label><label>Power <input id="power" type="range" min="20" max="100" value="68"><output id="power-value">68%</output></label><button id="fire">Summon & attack <span>↗</span></button></div></section><footer><span><kbd>A</kbd><kbd>D</kbd> move · <kbd>W</kbd> jump · <kbd>←</kbd><kbd>→</kbd> aim · <kbd>Space</kbd> attack</span><span id="log" role="status">Two trainers. Six partners. One battlefield.</span></footer></main><dialog id="modal"><p class="eyebrow">WELCOME TO THE HIGHLANDS</p><h2>Your team. Your terrain.</h2><p>Take turns on this shared keyboard. Move with A/D and jump with W. Choose a partner and move, adjust angle and power, then summon. Angles are measured from the right: 45° fires right, 135° fires left.</p><p>Each turn has a 90-pixel movement budget and one attack. Trainers have 150 HP. Falling into the sea costs the match. Craters, tunnels and new rock cover persist. Wet trainers take extra electric damage; burning lasts two turns. Aim dots predict ballistic attacks, not beams.</p><p>Every partner has a distinct role. Try pushing a rival into the sea or destroying the ground beneath them. No timer: take your time.</p><button id="close-help">Let’s battle</button></dialog><dialog id="result"><p class="eyebrow">BATTLE COMPLETE</p><h2 id="winner"></h2><p>A new rivalry begins.</p><button id="rematch">Play again ↗</button></dialog></div><script type="module" src="/src/main.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#111f2c" />
+    <title>Pokémon Battlefront · Trainer Arena</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="#" id="brand" aria-label="Battlefront home"
+        ><span class="brand-ball">◒</span
+        ><span>BATTLEFRONT<small>POKÉMON · TRAINER ARENA</small></span></a
+      ><span class="version">FAN EDITION <i>02</i></span>
+      <nav>
+        <button id="help" class="quiet">? <span>Field guide</span></button
+        ><button id="settings" class="quiet">⚙ <span>Settings</span></button
+        ><button id="pause" class="quiet" hidden>Pause</button>
+      </nav>
+    </header>
+    <main>
+      <section id="home" aria-label="Battle setup">
+        <div class="home-grid">
+          <div class="hero">
+            <canvas
+              id="hero-art"
+              width="900"
+              height="720"
+              aria-label="Six Pokémon overlooking the highlands"
+            ></canvas>
+            <div class="hero-copy">
+              <p class="eyebrow">
+                <span class="live-dot"></span> YOUR TEAM. YOUR TERRAIN.
+              </p>
+              <h1>Small arena.<br /><em>Big rivalries.</em></h1>
+              <p>
+                Six partners. Twelve ways to change the battlefield.<br />A
+                turn-based artillery adventure.
+              </p>
+            </div>
+            <div class="hero-caption">
+              <span>01 / TRAINER BATTLE</span
+              ><span>SUMMON · AIM · MAKE AN IMPACT</span>
+            </div>
+          </div>
+          <div class="setup-panel">
+            <p class="eyebrow">LET’S SETTLE THIS</p>
+            <h2>Pick your battle.</h2>
+            <p class="muted intro">Everything you need for a good rivalry.</p>
+            <fieldset class="mode-picker">
+              <legend>01 <span>WHO’S PLAYING?</span></legend>
+              <label class="mode-card"
+                ><input type="radio" name="mode" value="solo" checked /><span
+                  class="mode-icon"
+                  >✦</span
+                ><span
+                  ><strong>Solo expedition</strong
+                  ><small>Outsmart a computer trainer</small></span
+                ><span class="radio-mark"></span></label
+              ><label class="mode-card"
+                ><input type="radio" name="mode" value="hotseat" /><span
+                  class="mode-icon"
+                  >⚔</span
+                ><span
+                  ><strong>Couch rivalry</strong
+                  ><small>Two players, one keyboard</small></span
+                ><span class="radio-mark"></span></label
+              ><label class="mode-card"
+                ><input type="radio" name="mode" value="practice" /><span
+                  class="mode-icon"
+                  >◎</span
+                ><span
+                  ><strong>Target practice</strong
+                  ><small>No timer, no return fire</small></span
+                ><span class="radio-mark"></span
+              ></label>
+            </fieldset>
+            <fieldset>
+              <legend>02 <span>CHOOSE YOUR GROUND</span></legend>
+              <div id="map-picker"></div>
+              <p id="map-description" class="muted"></p>
+            </fieldset>
+            <div class="setup-options">
+              <label
+                >Map seed<input
+                  id="seed"
+                  type="number"
+                  value="42"
+                  min="1"
+                  max="999999"
+                  aria-label="Map seed" /></label
+              ><label id="difficulty-label"
+                >AI difficulty<select id="difficulty">
+                  <option value="easy">Rookie</option>
+                  <option value="normal" selected>Trainer</option>
+                  <option value="hard">Ace</option>
+                </select></label
+              >
+            </div>
+            <label class="check"
+              ><input type="checkbox" id="timer-option" checked /> 45-second
+              turns <span>off in practice</span></label
+            >
+            <button id="start" class="primary large">
+              Enter the battlefield <span>→</span>
+            </button>
+            <p class="setup-note">
+              No downloads inside the game. No accounts. Just battle.
+            </p>
+          </div>
+        </div>
+        <div class="home-bottom">
+          <div>
+            <b>01</b
+            ><span
+              ><strong>Make an entrance</strong>Throw a ball. Your partner takes
+              the field.</span
+            >
+          </div>
+          <div>
+            <b>02</b
+            ><span
+              ><strong>Find your angle</strong>Arc over cover or carve straight
+              through.</span
+            >
+          </div>
+          <div>
+            <b>03</b
+            ><span
+              ><strong>Leave your mark</strong>Every crater changes the next
+              turn.</span
+            >
+          </div>
+        </div>
+      </section>
+      <section id="battle-screen" hidden aria-label="Trainer battle">
+        <div class="battle-top">
+          <div>
+            <p class="eyebrow" id="map-tag"></p>
+            <h2 id="map-name"></h2>
+          </div>
+          <div class="battle-top-right">
+            <span id="mode-name"></span
+            ><button id="fullscreen" class="quiet" title="Toggle fullscreen">
+              [ ] Fullscreen
+            </button>
+          </div>
+        </div>
+        <div class="scoreboard">
+          <div id="p0" class="player-card"></div>
+          <div class="turn-card">
+            <span id="turn-label"></span><strong id="turn-owner"></strong>
+            <div class="weather">
+              <span id="wind"></span><span id="timer"></span>
+            </div>
+          </div>
+          <div id="p1" class="player-card right"></div>
+        </div>
+        <div class="arena">
+          <canvas
+            id="game"
+            width="1280"
+            height="680"
+            tabindex="0"
+            aria-label="Battlefield. Click to aim. A and D move, W jumps, Space attacks."
+          ></canvas>
+          <div class="arena-corners">
+            <span id="stage-tag"></span
+            ><span>TRAINER BATTLE / SIX PARTNERS</span>
+          </div>
+          <div id="turn-banner" aria-live="polite"></div>
+          <button id="guide-toggle" class="arena-button" aria-pressed="true">
+            ◎ Aim guide
+          </button>
+        </div>
+        <div class="event-strip">
+          <span id="phase-dot"></span
+          ><strong id="announcement" role="status" aria-live="polite"></strong
+          ><span id="movement"></span
+          ><button id="log-toggle" class="quiet">Battle log →</button>
+        </div>
+        <section class="console" aria-label="Battle controls">
+          <div class="partners-panel">
+            <p class="eyebrow">01 / CHOOSE A PARTNER <span>1–6</span></p>
+            <div id="roster"></div>
+          </div>
+          <div class="moves-panel">
+            <p class="eyebrow">02 / CHOOSE YOUR MOVE <span>Q / E</span></p>
+            <div id="moves"></div>
+            <p id="description"></p>
+          </div>
+          <div class="aim-panel">
+            <div class="aim-title">
+              <p class="eyebrow">03 / LINE IT UP</p>
+              <div>
+                <button id="face-left" class="mini" aria-label="Face left">
+                  ←</button
+                ><button id="face-right" class="mini" aria-label="Face right">
+                  →
+                </button>
+              </div>
+            </div>
+            <label class="slider-label"
+              >Elevation<input
+                id="angle"
+                type="range"
+                min="-65"
+                max="85"
+                value="45" /><output id="angle-value"></output></label
+            ><label class="slider-label" id="power-label"
+              >Power<input
+                id="power"
+                type="range"
+                min="20"
+                max="100"
+                value="75" /><output id="power-value"></output></label
+            ><button id="fire" class="primary">
+              Summon & attack <span>→</span>
+            </button>
+            <p id="fire-reason"></p>
+          </div>
+        </section>
+        <div class="battle-bottom">
+          <div class="movement-controls">
+            <button id="move-left" aria-label="Move left">A ←</button
+            ><button id="jump" aria-label="Jump">W ↑</button
+            ><button id="move-right" aria-label="Move right">D →</button
+            ><span>move / jump</span>
+          </div>
+          <span class="keyboard-hint"
+            >Click field to aim · ← → elevation · ↑ ↓ power · F flip · Space
+            attack</span
+          ><button id="pass" class="quiet">Pass turn</button>
+        </div>
+      </section>
+      <footer class="site-footer">
+        <span>POKÉMON BATTLEFRONT <i>UNOFFICIAL FAN PROTOTYPE</i></span
+        ><span>Built for good-natured rivalries.</span>
+      </footer>
+    </main>
+    <dialog id="help-dialog">
+      <button
+        class="dialog-x"
+        data-close="help-dialog"
+        aria-label="Close field guide"
+      >
+        ×
+      </button>
+      <p class="eyebrow">THE TRAINER’S FIELD GUIDE</p>
+      <h2>Know your ground.</h2>
+      <div class="help-grid">
+        <article>
+          <b>01</b>
+          <h3>Move, then make your move.</h3>
+          <p>
+            A/D moves, W jumps. Each turn gives 125 movement points and one
+            attack. A jump costs 18. Pick a partner with 1–6, then Q/E to choose
+            its move.
+          </p>
+        </article>
+        <article>
+          <b>02</b>
+          <h3>Aim with confidence.</h3>
+          <p>
+            Click the field to aim or use the sliders. Flip direction with F.
+            Dots show the predicted arc; a ring marks the impact. Power changes
+            lobs and Heavy Slam, not beams. Space commits the attack.
+          </p>
+        </article>
+        <article>
+          <b>03</b>
+          <h3>Change the battlefield.</h3>
+          <p>
+            Boulder opens huge craters. Hydro Pump pushes. Thunderbolt stops at
+            cover. Ghost attacks pass through it. Rock Wall builds cover. Dig
+            tunnels. Heavy Slam leaps to its marker.
+          </p>
+        </article>
+        <article>
+          <b>04</b>
+          <h3>Find a combination.</h3>
+          <p>
+            Water wets for two enemy turns and extinguishes burns. Electricity
+            deals 50% more to wet trainers. Fire burns for 4 HP on each of two
+            turns. Curse halves the rival’s next movement budget. Strong moves
+            need a turn or two to recharge.
+          </p>
+        </article>
+      </div>
+      <p class="callout">
+        Trainers have 140 HP. Falls can hurt; the sea is fatal. Blast damage
+        fades with distance and is reduced by solid cover. Pokémon are summoned
+        attackers and do not take damage in Trainer Battle.
+      </p>
+      <button class="primary" data-close="help-dialog">
+        Got it. Let’s battle →
+      </button>
+    </dialog>
+    <dialog id="settings-dialog">
+      <button
+        class="dialog-x"
+        data-close="settings-dialog"
+        aria-label="Close settings"
+      >
+        ×
+      </button>
+      <p class="eyebrow">MAKE YOURSELF AT HOME</p>
+      <h2>Your play settings.</h2>
+      <label class="setting-row"
+        ><span
+          ><strong>Sound effects</strong
+          ><small>Synthesized summons, attacks and impacts</small></span
+        ><input id="sound-option" type="checkbox" /></label
+      ><label class="slider-label"
+        >Volume<input
+          id="volume-option"
+          type="range"
+          min="0"
+          max="100"
+          value="35"
+        /><output id="volume-value">35%</output></label
+      ><label class="setting-row"
+        ><span
+          ><strong>Reduced motion</strong
+          ><small>No camera shake; fewer particles</small></span
+        ><input id="motion-option" type="checkbox" /></label
+      ><label class="setting-row"
+        ><span
+          ><strong>Trajectory guide</strong
+          ><small>Preview arcs, beams and blast radii</small></span
+        ><input id="guide-option" type="checkbox" checked
+      /></label>
+      <p class="muted">
+        Preferences save on this browser. Match state does not.
+      </p>
+      <button class="primary" data-close="settings-dialog">
+        Back to the field
+      </button>
+    </dialog>
+    <dialog id="pause-dialog">
+      <p class="eyebrow">TAKE A BREATHER</p>
+      <h2>Battle paused.</h2>
+      <p>The timer and battlefield are paused.</p>
+      <div class="dialog-actions">
+        <button id="resume" class="primary">Resume battle →</button
+        ><button id="restart">Restart match</button
+        ><button id="return-menu">Return to setup</button>
+      </div>
+    </dialog>
+    <dialog id="result">
+      <p class="eyebrow">THE DUST HAS SETTLED</p>
+      <h2 id="winner"></h2>
+      <p id="result-subtitle"></p>
+      <div id="result-stats"></div>
+      <div class="dialog-actions">
+        <button id="rematch" class="primary">Rematch →</button
+        ><button id="result-menu">Choose a new battlefield</button>
+      </div>
+    </dialog>
+    <dialog id="log-dialog">
+      <button
+        class="dialog-x"
+        data-close="log-dialog"
+        aria-label="Close battle log"
+      >
+        ×
+      </button>
+      <p class="eyebrow">EVERY MOVE TELLS A STORY</p>
+      <h2>Battle log.</h2>
+      <ol id="battle-log"></ol>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

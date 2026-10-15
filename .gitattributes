@@ -1,0 +1,2 @@
+# The portable release is rebuilt from src/ by npm run build.
+play.html linguist-generated=true

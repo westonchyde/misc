@@ -1,13 +1,14 @@
 {
   "name": "battlefront",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "vite build && node scripts/standalone.mjs",
     "test": "node --test",
-    "test:browser": "node checks/browser.mjs"
+    "test:browser": "node checks/browser.mjs && node checks/ui-regressions.mjs",
+    "test:portable": "node checks/portable.mjs"
   },
   "devDependencies": {
     "vite": "^6.1.0",
