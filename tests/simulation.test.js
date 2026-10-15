@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {Battle,Terrain,blastDamage,random} from '../src/simulation.js';
+import {roster} from '../src/content.js';
+test('seeded terrain and random are repeatable',()=>{assert.deepEqual(new Terrain(42).cells,new Terrain(42).cells);let a=random(2),b=random(2);for(let i=0;i<20;i++)assert.equal(a(),b());});
+test('terrain removal and creation synchronize collision',()=>{let t=new Terrain();let y=t.top(500)+30;assert.ok(t.solid(500,y));t.circle(500,y,20);assert.ok(!t.solid(500,y));t.circle(500,y,10,1);assert.ok(t.solid(500,y));});
+test('falloff has bounded edge and center damage',()=>{assert.equal(blastDamage(40,0,50),40);assert.equal(blastDamage(40,25,50),20);assert.equal(blastDamage(40,60,50),0);});
+test('all twelve moves execute, settle, and hand off exactly once',()=>{for(let s of roster)for(let m of s.moves){let b=new Battle();assert.ok(b.commit(s,m,48,68));assert.equal(b.commit(s,m,48,68),false);for(let i=0;i<1200&&b.turn===1&&b.phase!=='over';i++)b.step();assert.ok(b.turn===2||b.phase==='over',m.name);assert.ok(b.players.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));}});
+test('wetness amplifies electricity and curse reduces movement',()=>{let b=new Battle(),p=b.players[1];p.wet=2;b.hit(p.x,p.y,roster[2].moves[0],true);assert.equal(p.hp,108);b=new Battle();p=b.players[0];p.curse=1;let x=p.x;b.move(1);assert.ok(p.x-x<=1.1+1e-6);});
+test('movement budget and one attack per turn are enforced',()=>{let b=new Battle();for(let i=0;i<200;i++)b.move(1);assert.equal(b.budget,0);let x=b.players[0].x;b.move(1);assert.equal(b.players[0].x,x);b.commit(roster[0],roster[0].moves[0],60,60);b.move(1);assert.equal(b.players[0].x,x);});
+test('death, draw, and out of bounds resolve',()=>{let b=new Battle();b.players[1].hp=0;b.step();assert.equal(b.winner,0);b=new Battle();b.players.forEach(p=>p.hp=0);b.step();assert.equal(b.winner,-1);b=new Battle();b.players[0].y=610;b.step();assert.equal(b.winner,1);});
+test('replaying commands produces identical final state',()=>{function run(){let b=new Battle(9);for(let i=0;i<10;i++)b.move(1);b.commit(roster[0],roster[0].moves[0],48,70);for(let i=0;i<700;i++)b.step();return JSON.stringify({p:b.players,t:b.turn,c:Array.from(b.terrain.cells)});}assert.equal(run(),run());});
+test('destroying support makes trainers fall and settle on exposed terrain',()=>{let b=new Battle(),p=b.players[0],y=p.y;b.terrain.circle(p.x,p.y+26,50);for(let i=0;i<180;i++)b.step();assert.ok(p.y>y+20);assert.ok(p.grounded);assert.ok(!b.terrain.solid(p.x,p.y));});
+test('explosions damage and knock back rivals',()=>{let b=new Battle(),p=b.players[1];b.hit(p.x-12,p.y,roster[1].moves[1]);assert.ok(p.hp<150);assert.ok(p.vx>0);assert.ok(p.vy<0);});
+test('burn ticks only at owner turn start and can decide victory',()=>{let b=new Battle();b.players[1].burn=2;b.players[1].hp=4;b.nextTurn();assert.equal(b.phase,'over');assert.equal(b.winner,0);});
