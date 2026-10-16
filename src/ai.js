@@ -1,4 +1,4 @@
-import { roster, BALLISTIC, difficultyProfiles } from "./content.js";
+import { roster, BALLISTIC, REMOTE, difficultyProfiles } from "./content.js";
 import { traceShot, originFor, SEA, W, RULES } from "./simulation.js";
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function evaluateShot(
@@ -93,6 +93,8 @@ export function evaluateShot(
   )
     score -= 5;
   if (profile.conserve) score -= move.cooldown * 0.7;
+  if (move.behavior === "bounce" && Math.sin((angle * Math.PI) / 180) < 0.35)
+    score -= 16;
   if (trace.x < 0 || trace.x > W || trace.y >= SEA) score -= 12;
   return {
     species,
@@ -128,7 +130,7 @@ export function planShot(battle) {
   let evaluations = 0;
   function evaluate(s, m, a, p) {
     const move = roster[s].moves[m],
-      key = `${move.kind === "phase" ? "phase" : move.kind === "beam" ? "beam" : "arc"}:${a.toFixed(3)}:${p.toFixed(3)}`;
+      key = `${move.kind === "beam" ? "beam" : move.kind === "phase" ? "phase" : move.behavior === "bounce" ? "bounce" : "arc"}:${REMOTE.has(move.kind) ? "55,-42" : move.anchor}:${move.gravityScale || 1}:${a.toFixed(3)}:${p.toFixed(3)}`;
     let trace = cache.get(key);
     if (!trace) {
       trace = traceShot(battle, move, a, p, battle.active, false);
@@ -141,9 +143,11 @@ export function planShot(battle) {
     for (let m = 0; m < 2; m++) {
       if (!battle.available(s, m)) continue;
       let best = null;
+      const options = [];
       for (const a of angles)
         for (const p of roster[s].moves[m].kind === "beam" ? [70] : powers) {
           const option = evaluate(s, m, a, p);
+          options.push(option);
           if (!best || option.score > best.score) best = option;
         }
       if (best && profile.refine) {
@@ -159,10 +163,107 @@ export function planShot(battle) {
             if (option.score > best.score) best = option;
           }
       }
-      if (best) ranked.push(best);
+      if (best) {
+        ranked.push(best);
+        if (battle.options.difficulty !== "easy") {
+          options.sort((a, b) => b.score - a.score);
+          const alternatives = [];
+          for (const o of options) {
+            if (
+              Math.abs(o.angle - best.angle) < 4 &&
+              Math.abs(o.power - best.power) < 7
+            )
+              continue;
+            if (
+              alternatives.some(
+                (p) =>
+                  Math.abs(p.angle - o.angle) < 4 &&
+                  Math.abs(p.power - o.power) < 7,
+              )
+            )
+              continue;
+            alternatives.push(o);
+            if (alternatives.length === 3) break;
+          }
+          ranked.push(...alternatives);
+        }
+      }
     }
   if (!ranked.length) return null;
   ranked.sort((a, b) => b.score - a.score);
+  let forecasts = 0;
+  const forecastCount =
+    battle.options.difficulty === "hard"
+      ? 10
+      : battle.options.difficulty === "normal"
+        ? 4
+        : 0;
+  const forecasted = [];
+  const shortlist = [];
+  const perMove = new Map();
+  for (const option of forecastCount > 0 ? ranked : []) {
+    const key = option.species + ":" + option.moveIndex,
+      n = perMove.get(key) || 0;
+    if (n >= 3) continue;
+    shortlist.push(option);
+    perMove.set(key, n + 1);
+    if (shortlist.length >= forecastCount) break;
+  }
+  for (const option of shortlist) {
+    const sim = battle.fork(),
+      owner = battle.active,
+      enemy = 1 - owner,
+      startTurn = sim.turn;
+    if (
+      !sim.commit(option.species, option.moveIndex, option.angle, option.power)
+    )
+      continue;
+    for (
+      let tick = 0;
+      tick < 1200 && sim.phase !== "over" && sim.turn === startTurn;
+      tick++
+    )
+      sim.step();
+    const dealt = rival.hp - sim.players[enemy].hp,
+      self = me.hp - sim.players[owner].hp;
+    const m = roster[option.species].moves[option.moveIndex],
+      foe = sim.players[enemy];
+    const hazard = sim.hazards.some(
+      (h) => h.type !== "water" && Math.abs(h.x - foe.x) < h.radius + 20,
+    )
+      ? 4 * profile.terrainWeight
+      : 0;
+    const wetBonus =
+      foe.wet &&
+      !rival.wet &&
+      me.team.some((s) =>
+        roster[s].moves.some(
+          (m) => m.effect === "electric" && me.ammo[m.id] > 0,
+        ),
+      )
+        ? 6 * profile.statusWeight
+        : 0;
+    option.score =
+      dealt -
+      self * profile.selfWeight +
+      hazard +
+      wetBonus -
+      m.cooldown * 0.6 +
+      (foe.hp === 0 ? 45 : 0);
+    option.forecast = {
+      damage: dealt,
+      self,
+      hazards: sim.hazards.length,
+      enemyHP: foe.hp,
+    };
+    forecasted.push(option);
+    forecasts++;
+  }
+  if (forecasted.length) {
+    ranked.length = 0;
+    ranked.push(...forecasted);
+    ranked.sort((a, b) => b.score - a.score);
+  }
   const eligible = ranked
     .filter((p) => p.score >= ranked[0].score - 7)
     .slice(0, profile.choices);
@@ -179,6 +280,7 @@ export function planShot(battle) {
   );
   choice.diagnostics = {
     level: battle.options.difficulty,
+    forecasts,
     candidates: evaluations,
     trajectories: cache.size,
     legalMoves: ranked.length,
@@ -196,7 +298,19 @@ export function movementPlan(battle, shot) {
   if (!profile.movement || !me.grounded || battle.budget < 25) return null;
   let direction = 0,
     reason = "";
-  if (battle.options.difficulty === "hard" && (me.x < 125 || me.x > W - 125)) {
+  const danger = battle.hazards.find(
+    (h) =>
+      h.type !== "water" &&
+      Math.abs(h.x - me.x) < h.radius + 20 &&
+      Math.abs(h.y - me.y - 18) < 45,
+  );
+  if (danger) {
+    direction = me.x < danger.x ? -1 : 1;
+    reason = "leave hazardous ground";
+  } else if (
+    battle.options.difficulty === "hard" &&
+    (me.x < 125 || me.x > W - 125)
+  ) {
     direction = me.x < W / 2 ? 1 : -1;
     reason = "escape sea edge";
   } else if (shot && shot.score < 18) {

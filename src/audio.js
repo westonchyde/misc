@@ -1,3 +1,4 @@
+import { roster } from "./content.js";
 export class AudioFX {
   constructor(prefs) {
     this.prefs = prefs;
@@ -51,7 +52,41 @@ export class AudioFX {
       this.tone(430, 620, 0.12);
       this.tone(620, 840, 0.18, "sine", 0.12);
     }
-    if (e.type === "attack") {
+    const move = e.visual
+      ? roster.flatMap((s) => s.moves).find((m) => m.visual === e.visual)
+      : null;
+    if (e.type === "attack" && move) {
+      const type = move.effect,
+        behavior = move.behavior;
+      if (["stream", "water"].includes(behavior)) {
+        this.noise(0.7, 2800);
+        this.tone(190, 85, 0.55, "sine");
+      } else if (
+        ["flame", "lava", "ember"].includes(behavior) ||
+        type === "burn"
+      ) {
+        this.noise(0.65, 1200);
+        this.tone(75, 40, 0.45, "sawtooth", 0, 0.5);
+      } else if (type === "electric") {
+        [0, 0.09, 0.2].forEach((d, i) =>
+          this.tone(1300 + i * 300, 130, 0.13, "sawtooth", d, 0.55),
+        );
+        this.noise(0.14, 4800);
+      } else if (
+        ["bounce", "burrow", "slam"].includes(behavior) ||
+        move.species === "golem"
+      ) {
+        this.noise(0.3, 450);
+        this.tone(90, 27, 0.45, "triangle", 0, 1.6);
+      } else if (move.kind === "beam") {
+        this.tone(160, 940, 0.3, "sine");
+        this.tone(820, 160, 0.5, "triangle", 0.3, 0.65);
+      } else if (["poison", "curse", "weaken"].includes(type)) {
+        this.tone(240, 480, 0.45, "sine");
+        this.tone(247, 470, 0.45, "sine");
+      } else this.tone(380, 90, 0.28, "triangle");
+    }
+    if (e.type === "attack" && !move) {
       this.tone(
         e.kind === "bolt" ? 900 : 290,
         100,
@@ -62,8 +97,19 @@ export class AudioFX {
         this.noise(0.4, e.kind === "jet" ? 2200 : 900);
     }
     if (e.type === "impact") {
-      this.noise(0.3);
-      this.tone(100, 30, 0.3, "triangle", 0, 1.4);
+      const water = ["stream", "water", "freeze"].includes(move?.behavior);
+      this.noise(
+        water ? 0.2 : 0.3,
+        water ? 3100 : move?.effect === "electric" ? 4200 : 700,
+      );
+      this.tone(
+        water ? 260 : 100,
+        water ? 100 : 30,
+        0.25,
+        "triangle",
+        0,
+        water ? 0.65 : 1.2,
+      );
     }
     if (e.type === "splash") this.noise(0.4, 2500);
     if (e.type === "damage") this.tone(280, 120, 0.12, "triangle");

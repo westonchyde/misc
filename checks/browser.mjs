@@ -54,7 +54,7 @@ try {
   );
   assert.equal((await state()).assets.loaded, 18);
   await page.screenshot({
-    path: "/tmp/battlefront-v3-menu.png",
+    path: "/tmp/battlefront-v4-menu.png",
     fullPage: true,
   });
   await page.locator("#settings").click();
@@ -67,28 +67,33 @@ try {
   assert.equal(await page.locator("#volume-option").inputValue(), "0");
   assert.ok(await page.locator("#motion-option").isChecked());
   await page.getByRole("button", { name: "Back to the field" }).click();
+  await page.locator("#aim-style").selectOption("assisted");
+  await page.locator("summary").click();
+  await page.locator("#first-player").selectOption("0");
   await page.locator(".mode-card:has(input[value=hotseat])").click();
   await page.locator("#timer-option").uncheck();
   await page.locator("#start").click();
   assert.equal(await page.locator("#draft-pool button").count(), 18);
   assert.ok(await page.locator("#draft-begin").isDisabled());
   await page.screenshot({
-    path: "/tmp/battlefront-v3-draft.png",
+    path: "/tmp/battlefront-v4-draft.png",
     fullPage: true,
   });
   for (let index = 0; index < 12; index++) {
     const before = (await state()).draft;
     await page.locator(`#draft-pool button[data-species="${index}"]`).click();
+    assert.equal(
+      (await state()).draft.picks.length,
+      before.picks.length,
+      "inspection must not commit a pick",
+    );
+    await page.locator("#draft-confirm").click();
     const after = (await state()).draft;
     assert.equal(
       after.teams[before.active].length,
       before.teams[before.active].length + 1,
     );
-    assert.ok(
-      await page
-        .locator(`#draft-pool button[data-species="${index}"]`)
-        .isDisabled(),
-    );
+    assert.ok(await page.locator("#draft-confirm").isDisabled());
   }
   const teams = (await state()).draft.teams;
   assert.deepEqual(
@@ -106,7 +111,7 @@ try {
       .isVisible(),
   );
   await page.screenshot({
-    path: "/tmp/battlefront-v3-battle.png",
+    path: "/tmp/battlefront-v4-battle.png",
     fullPage: true,
   });
   await page.locator("#angle").fill("-20");
@@ -138,18 +143,18 @@ try {
   );
   await page.waitForTimeout(450);
   await page.screenshot({
-    path: "/tmp/battlefront-v3-relay.png",
+    path: "/tmp/battlefront-v4-relay.png",
     fullPage: true,
   });
   await ready(2);
-  assert.ok((await state()).hp[1] < 180);
+  assert.ok((await state()).hp[1] < (await state()).maxHP);
   assert.equal((await state()).ammo[0].flamethrower, 2);
   assert.equal((await state()).active, 1);
   await page.getByRole("button", { name: "Blastoise", exact: true }).click();
   await targetRival();
   await page.locator("#fire").click();
   await ready(3);
-  assert.ok((await state()).hp[0] < 180);
+  assert.ok((await state()).hp[0] < (await state()).maxHP);
   await page.locator("#log-toggle").click();
   assert.ok((await page.locator("#battle-log li").count()) >= 4);
   await page.getByRole("button", { name: "Close battle log" }).click();
@@ -159,8 +164,9 @@ try {
   await page.locator("#difficulty").selectOption("hard");
   await page.locator("#start").click();
   await page
-    .getByRole("button", { name: "Draft Charizard", exact: true })
+    .getByRole("button", { name: "Inspect Charizard", exact: true })
     .click();
+  await page.locator("#draft-confirm").click();
   await page.waitForFunction(
     () => window.battlefront.state.draft.picks.length === 3,
     null,
@@ -193,14 +199,22 @@ try {
   assert.equal((await state()).winner, 1);
   await page.locator("#result").waitFor({ state: "visible" });
   await page.screenshot({
-    path: "/tmp/battlefront-v3-results.png",
+    path: "/tmp/battlefront-v4-results.png",
     fullPage: true,
   });
-  const oldTeams = (await state()).teams;
+  const oldTeams = (await state()).teams,
+    opening = (await state()).opening;
+  assert.deepEqual((await state()).series.wins, [0, 1]);
   await page.locator("#rematch").click();
   await ready(1);
-  assert.deepEqual((await state()).hp, [180, 180]);
+  assert.deepEqual((await state()).hp, [
+    (await state()).maxHP,
+    (await state()).maxHP,
+  ]);
   assert.deepEqual((await state()).teams, oldTeams);
+  assert.equal((await state()).opening, 1 - opening);
+  assert.equal((await state()).series.round, 2);
+  assert.deepEqual((await state()).series.wins, [0, 1]);
   await menu();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator("input[name=team-mode][value=random]").check();
@@ -211,7 +225,7 @@ try {
     ),
   );
   await page.screenshot({
-    path: "/tmp/battlefront-v3-mobile.png",
+    path: "/tmp/battlefront-v4-mobile.png",
     fullPage: true,
   });
   assert.deepEqual(errors, []);

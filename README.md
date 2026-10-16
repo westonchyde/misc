@@ -1,110 +1,104 @@
-# Pokémon Battlefront — Draft Edition 03
+# Pokémon Battlefront · Terrain & Tactics Edition 04
 
-A browser artillery fan game inspired by Pocket Tanks and Worms: draft a team, summon actual animated Pokémon, aim long-range attacks, destroy terrain and outlast the opposing trainer.
+A playable, browser-based, two-trainer artillery fan game inspired by Pocket Tanks and Worms. Draft six Pokémon, aim an attack, visibly summon your partner and reshape a destructible battlefield. Trainers take damage; summoned Pokémon return to their balls.
 
 ## Play without Terminal
 
-Download **Code → Download ZIP** from GitHub, unzip it, and open **`play.html`** in your browser. It includes all 18 original animated sprites, effects and code. No account, asset server, Node installation or internet connection is required to play. Download a fresh ZIP to update an older local copy; the HTML file does not auto-update.
+1. [Download the current ZIP](https://github.com/westonchyde/misc/archive/refs/heads/main.zip).
+2. Unzip it and open **play.html** in your browser.
+3. Check that the header says **FAN EDITION 04**. Choose solo, local hot-seat or practice, then inspect/draft your team or randomize it.
 
-Choose solo vs CPU, shared-keyboard two-player, or practice. Choose **Snake draft** or **Random teams**, review your six, then enter the battlefield. Randomize again to reroll both teams.
+All 18 animated Pokémon sprites, code and sounds are included. No accounts, runtime downloads or server are required. Replace an older download to update it. A private cloud address is not a public game link.
 
-## The draft
+## What changed in Edition 04
 
-18 Pokémon share one pool. Each trainer gets six exclusive picks, with both moves included. Snake order is **Ember → River → River → Ember**, repeated until both have six. You cannot take a Pokémon already drafted. In solo and practice, River picks automatically; CPU drafting strategy follows the selected difficulty. Hot-seat players take turns picking on the same computer. Random teams are repeatable from the seed and reroll sequence, have six Pokémon each, and never overlap.
+- **Seven gameplay silhouettes**, independently selectable from three scenery themes: rolling hills, a central mountain, deep valley, twin peaks, mesas, crater basin and split islands. Natural/dramatic elevation, seeds, rerolls, safe spawn shelves and actual terrain previews in setup/draft.
+- **An always-visible aim arrow**, Classic manual aiming, optional Assisted targeting, short/full/no trajectory prediction, previous-shot feedback and stable camera framing.
+- **Original animated pixel-art trainers** with saved names, outfit palettes, skin tones and headwear. Cosmetics have equal combat rules.
+- **Different physical attacks and aftermath:** bouncing rocks, colliding seed/meteor/lava fragments, traveling underground excavation, timed ground ruptures, connected water pulses/runoff, ground fire/poison, wet-ground conduction and temporary solid ice shelves.
+- **Move inspection before drafting**, including live demonstrations, uses, terrain effects and counterplay. Clicking a card inspects; the confirmation button spends the pick. The shared snake draft and random teams remain.
+- **240 HP standard matches**, optional Quick/Endurance settings, opening-player choice, best-of-three scores, alternating openers and separate rematch/new-seed/redraft actions.
+- **AI aftermath forecasting**, terrain-aware drafting, hazard avoidance, material-specific audio and an interactive aiming lesson.
 
-## Controls
+The Pokémon sprites remain the original animated assets. Attack choreography combines those animations with procedural poses and material effects; it is not a set of newly authored species attack sprite sheets. The [revision notes](docs/REVISION-04.md) document exact mechanics and limits; the [audit](docs/POCKET-TANKS-AUDIT.md) records the broader design direction.
 
-| Action | Controls |
-| --- | --- |
-| Move / jump | A / D / W, or on-screen buttons |
-| Select your six partners / their two moves | Click, or 1–6 and Q / E |
-| Set a landing target | Click/drag the field with **Click-to-target arcs** enabled |
-| Classic manual aim | Sliders and arrow keys; Shift-click sets direction and power directly |
-| Elevation / power | Left/right arrows; up/down arrows |
-| Reverse aim | F or the facing buttons |
-| Commit | Space or **Summon & attack** |
-| Pause | Escape or **Pause** |
+## Controls and rules
 
-Pointer assistance searches legal arcs using the same terrain/wind collision code; it can be disabled in Settings. It does not promise a hit on a moving/falling target. Manual controls always remain available. Negative elevation aims downhill. Power applies to all arcs and relay shots; the three beams have fixed reach/power.
+| Action                | Controls                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Move / jump           | A / D, W, or on-screen buttons                                                                                |
+| Choose Pokémon / move | 1–6, Q / E, or buttons                                                                                        |
+| Elevation / power     | Sliders or arrow keys                                                                                         |
+| Flip / commit         | F / Space                                                                                                     |
+| Aim on the field      | Click/drag for manual direction/power; Assisted mode solves a landing arc; Shift-click always uses manual aim |
+| Guide / pause         | Field guide button cycles short/full/direction only; Escape pauses                                            |
 
-## Rules and artillery reach
+Classic is the default: gold direction arrow and a short launch segment, without automatically solving the landing. Assisted mode is available in setup; targeting and guide settings are independent from CPU difficulty. Full prediction shows the nominal shot, not every secondary collision/material consequence. Previous paths help correct misses.
 
-- Trainers have **180 HP**. Each turn gives **125 movement points**, one attack, and optionally **45 seconds**. Jumping costs 18. Practice has no timer or return fire.
-- Each primary has **3 shots**, each secondary **2**, and strong moves also recharge for 1–2 owner turns. Ownership, ammo and cooldowns are enforced in simulation, including for CPU players. If all shots are exhausted, remaining HP decides the result.
-- **33 moves use arcs, salvos, clusters or relay summons.** Every one can reach across the normal starting distance. Beams (Hyper Beam, Solar Beam, Ice Beam) have full-arena range. Tests find a damaging legal shot for every move from both starting sides on all three maps: **216 reach checks**. Poor aim, intervening terrain or falling targets can still make you miss.
-- Short-range attacks use a **Poké Ball relay**. You aim the ball to a landing zone; the Pokémon emerges there, executes its attack, and recalls. Flamethrower is a local flame sweep after the long throw, not a short beam from your distant trainer.
-- Salvos are multiple swept physical projectiles with spread and staggered launches. Clusters have staggered secondary impacts. Earthquake breaks a broad ground strip; Stone Edge adds real rock cover; Dig makes a shaft and branches; beams excavate a narrow line. Every move has its own projectile/impact visual and attack choreography.
-- Damage fades with blast distance and is reduced behind cover. Water pushes and wets; electricity does 50% extra against wet trainers. Ice adds 8 damage to wet targets and reduces one movement budget. Water extinguishes/prevents burn. Burn and poison each tick for 4 HP on two owner turns. Disruption halves one movement budget. Snarl reduces damage for the next owner attack turn by 20%. Trainers have no Pokémon type advantages.
-- Falling can hurt (up to 35 damage); the sea and world boundaries are fatal. Impulses are globally scaled to 0.58 so initial-position water hits do not casually throw a full-health trainer across the entire map. Falling bodies and cluster fragments settle before handoff.
+Each turn grants **125 movement points**, one attack and optionally **45 seconds**. Jumping costs 18. The UI offers **180 / 240 / 300 HP**, defaulting to 240. Primaries have three uses, secondaries two; stronger moves recharge for one or two owner turns. Finite ammunition and ownership are enforced for humans and CPU. If both sides exhaust all moves, remaining HP decides the result. Falling can hurt; the sea/world boundaries are fatal. Practice has no return fire or timer, but trainers can still be knocked out.
 
-## Roster and moves
+Water wets and extinguishes fire. Electricity gains 50% against wet trainers. Ice adds eight damage to a wet target and reduces movement. Burn/poison statuses tick for four HP on two owner turns; curse reduces movement and Snarl weakens an attack. Trainers do not inherit Pokémon type advantages.
 
-| Pokémon | Primary / Secondary |
-| --- | --- |
-| Charizard | Flamethrower / Fire Blast |
-| Blastoise | Hydro Pump / Water Pulse |
-| Pikachu | Thunderbolt / Electro Ball |
-| Golem | Rock Blast / Earthquake |
-| Gengar | Shadow Ball / Sludge Bomb |
-| Snorlax | Body Slam / Hyper Beam |
-| Venusaur | Seed Bomb / Solar Beam |
-| Alakazam | Psybeam / Psychic |
-| Machamp | Dynamic Punch / Focus Blast |
-| Gyarados | Aqua Tail / Dragon Rage |
-| Lapras | Ice Shard / Ice Beam |
-| Dragonite | Hurricane / Draco Meteor |
-| Tyranitar | Stone Edge / Crunch |
-| Scizor | Bullet Punch / X-Scissor |
-| Espeon | Swift / Psyshock |
-| Umbreon | Snarl / Dark Pulse |
-| Typhlosion | Lava Plume / Eruption |
-| Garchomp | Dig / Dragon Rush |
+Ground materials are separate from trainer statuses. Surface water flows briefly downhill and can conduct Thunderbolt or freeze under Ice Beam. Fire, lava and poison patches persist and can affect either trainer; overlapping patches apply at most one ground-zone hit per trainer's active turn. Most patches/ice last four **global turns**, Fire Blast patches two; labels show remaining life. See the revision notes for exact damage and lifetime rules. Water uses bounded surface patches rather than volumetric filling.
 
-These are real Pokémon move names and historical species learnsets. Delivery, damage, resources, status rules and effects are original artillery adaptations, not a simulation of main-series turn-based Pokémon battles.
+## Roster
 
-## Difficulty
+| Pokémon    | Moves                       |
+| ---------- | --------------------------- |
+| Charizard  | Flamethrower / Fire Blast   |
+| Blastoise  | Hydro Pump / Water Pulse    |
+| Pikachu    | Thunderbolt / Electro Ball  |
+| Golem      | Rock Blast / Earthquake     |
+| Gengar     | Shadow Ball / Sludge Bomb   |
+| Snorlax    | Body Slam / Hyper Beam      |
+| Venusaur   | Seed Bomb / Solar Beam      |
+| Alakazam   | Psybeam / Psychic           |
+| Machamp    | Dynamic Punch / Focus Blast |
+| Gyarados   | Aqua Tail / Dragon Rage     |
+| Lapras     | Ice Shard / Ice Beam        |
+| Dragonite  | Hurricane / Draco Meteor    |
+| Tyranitar  | Stone Edge / Crunch         |
+| Scizor     | Bullet Punch / X-Scissor    |
+| Espeon     | Swift / Psyshock            |
+| Umbreon    | Snarl / Dark Pulse          |
+| Typhlosion | Lava Plume / Eruption       |
+| Garchomp   | Dig / Dragon Rush           |
 
-| Level | What changes |
-| --- | --- |
-| Rookie | Coarse angle/power search, wider aim error, simple damage choices, random drafting and no tactical walking |
-| Trainer | Denser search/refinement; wind, wet combos, self-damage, ammo conservation, balanced drafting and safe repositioning |
-| Ace | Finest search, more exact aim, terrain/edge denial, status synergy, lethal-shot and resource scoring, smarter drafting, edge retreat and higher-ground movement |
-
-All levels use the same HP, damage, wind, ammo, cooldowns, drafted ownership and command validation. A fixed reproducible 20-game regression set (alternating Ace sides, random drafted teams, three maps) finished **Ace 19 / Rookie 1**, with **5–18 attack turns**. This is evidence of separation on that set, not a universal win-rate or complete human balance study.
+Real move names and species learnsets are adapted into artillery rules. Seventeen moves have explicit behavior overrides; the rest use established projectile, salvo, phase, beam and relay families. This is not a main-series Pokémon battle simulator.
 
 ## Development
 
-Node 22+ recommended; validated with Node 24.19.0 and npm 11.9.0.
+Node 22+ recommended. Validated with Node 24.19.0 and npm 11.9.0.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the Local URL Vite prints on the **same computer**. A private cloud address is not a public game link. In the managed cloud environment, use `npm ci --cache /tmp/battlefront-npm` if the default cache is unwritable.
+Open the Local URL Vite prints on the **same computer**. In the managed cloud environment, `npm ci --cache /tmp/battlefront-npm` avoids an unwritable default cache.
 
 ```sh
-npm test                 # 31 tests, including 216 move/spawn reach cases
-npm run build            # dist/ plus self-contained play.html
-npm run test:browser      # Draft, combat, AI, input, effects and sprite animation checks; dev server required
-npm run test:portable     # Offline document with the exact portable HTML bytes
-npm run benchmark:ai      # Reproduce the fixed 20-match difficulty comparison
+npm test                 # Simulation, content, materials, terrain, replay and AI tests
+npm run build            # dist/ and self-contained play.html
+npm run test:browser      # Draft, combat, AI, input, effects and sprite checks
+npm run test:revision     # Profiles, terrain, aim feedback, inspection and tutorial
+npm run test:portable     # Exact standalone document, offline
+npm run test:terrain      # 2,016 move/shape/relief/seed/side range cases
+npm run benchmark:ai      # Fixed 20-match Ace/Rookie comparison across seven shapes
 ```
 
-Browser checks use `/usr/bin/chromium`, `CHROMIUM_PATH`, or Playwright's installed browser. Run `npx playwright install chromium` on a development computer if needed. `GAME_URL` overrides the default dev server URL. Screenshots are written to `/tmp/` by the checks. The portable build deliberately embeds about 1 MB of source GIF assets; Vite's large-chunk advisory is expected for this single-file deliverable. Do not edit `play.html` by hand; rebuild it after source changes.
+Browser/revision checks require the dev server and use `CHROMIUM_PATH`, `/usr/bin/chromium` or Playwright's installed browser. `GAME_URL` overrides the dev-server URL. Screenshots/results are written to `/tmp`. The large production JS chunk is expected: the portable build embeds about 1 MB of GIF assets. Rebuild `play.html` after source changes; do not edit it manually.
 
-## Modules
+## Architecture and validation
 
-`simulation.js` owns fixed 60 Hz terrain, wind, physics, commands, resources, attack patterns and match rules. `traceShot` and live shots share `advanceProjectile`. Gravity is 440 px/s², launch speed is 260 + power × 5.6, and the mask is 1280×680 with sea at y=632. Projectile steps are at most 3 pixels. Rendering and sprite timing cannot change hits.
+`simulation.js` owns fixed 60 Hz physics, terrain collision, legal commands, damage, materials, resource use, turn phases and match rules. Rendering cannot change hits. Gravity is 440 px/s²; launch speed is 260 + power × 5.6, with move-specific gravity. Swept projectile substeps are at most three pixels. Previews and live shots share the integrator.
 
-`draft.js` owns snake/random teams and CPU picks. `ai.js` owns bounded candidate search, tactical scoring, refinement and movement plans. `targeting.js` owns optional pointer arc search. `content.js` owns roster/move/map/difficulty data. `sprites.js` decodes the original GIFs into at most 28 sampled composited frames per species, preserving disposal semantics. `effects.js` draws the 36 custom move effects. `renderer.js` owns camera, terrain caching and choreography; `art.js` draws original trainers and primitives. `audio.js` synthesizes sound; `main.js` owns UI and commands.
+`landscapes.js` generates seeded silhouettes; `content.js` defines Pokémon, moves, anchors and tactical metadata. `draft.js`, `targeting.js` and `ai.js` handle drafting, optional targeting assistance and bounded planning. Higher CPU levels simulate a shortlist through actual aftermath using independent battle forks. AI uses the same commands, HP, damage and resource rules as humans.
 
-Phases: aim → summon/throw → flight → remote emergence/attack (when applicable) → settle → recall → handoff/victory. State hashes include teams, ammo, statuses, live shots, fragments and RNG state. They support regression checks, not an implemented online protocol. Settings schema version 1 persists locally; matches do not save.
+`sprites.js` decodes the pinned Pokémon GIFs. `trainers.js` supplies original pixel-art characters and cosmetic profiles. `renderer.js`, `effects.js` and `materials-art.js` render terrain, summons, attacks and ground materials; `audio.js` synthesizes material cues. `main.js` coordinates UI, settings, inspection demos, tutorial and local series. `scripts/standalone.mjs` packages the offline document.
 
-## Assets, evidence and remaining work
+Replay hashes include RNG, terrain, live fragments, hazards, temporary ice, ammunition and previous shots. This supports regression checks, not an implemented online protocol. Settings schema 2 migrates existing preferences and persists profiles locally; battles/series do not save.
 
-The sprites are actual Black/White animated front sprites from a pinned PokeAPI archive revision. Full ownership/source/checksum information is in [assets/ATTRIBUTION.md](assets/ATTRIBUTION.md) and its manifest. They remain third-party Pokémon IP; this is an unofficial fan game. Original trainer/background/effect code is separate and replaceable. No external fonts, asset APIs or runtime downloads are needed.
+[Validation results](docs/VALIDATION.md) distinguish automated evidence from remaining manual checks. A passing reach or effect-image test is not proof of good game feel or human balance. Human playtesting, actual Mac/Safari opening, Firefox/Edge, real touch/controller use, audio quality and long-session/device profiling remain manual work. Online play, squads, persistent Pokémon Battle mode, saved matches, progression and remappable/gamepad controls remain future scope.
 
-See [docs/ARTILLERY-REVISION.md](docs/ARTILLERY-REVISION.md), [docs/VALIDATION.md](docs/VALIDATION.md) and the retained [inventory](docs/PLAYABILITY-INVENTORY.md). The cloud browser blocks direct `file://` navigation by administrator policy; the portable smoke check loads the exact standalone bytes into an offline browser document and asserts zero HTTP requests. Actual Mac double-click, Safari/Firefox/Edge, real touch devices, audio quality, long-session memory/performance and human balance remain manual validation.
-
-Online multiplayer/reconnection, persistent Pokémon Battle mode, global terrain wet/fire/ice overlays, campaign/progression, saved matches/replay UI, remappable controls/gamepad and production rights clearance remain future work. Chilled trainers do not create persistent frozen-water platforms. Drafts and random teams are implemented; these are no longer a future placeholder.
+Pokémon names and sprites remain third-party IP in this unofficial fan game. [Attribution](assets/ATTRIBUTION.md), the asset manifest and [library notices](THIRD_PARTY_NOTICES.md) record provenance. Content and artwork remain replaceable.

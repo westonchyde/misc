@@ -588,8 +588,175 @@ const elementColors = {
   DARK: "#b8accb",
   GROUND: "#a6b4e9",
 };
+// Each move has an inspectable tactical identity, independent from its illustration.
+const mechanics = {
+  "fire-blast": {
+    behavior: "firecross",
+    family: "Cross-shaped burst",
+    terrain: "Cross cut + short fire patches",
+    counter: "Precise center damage with a narrow cross-shaped footprint.",
+  },
+  earthquake: {
+    behavior: "quake",
+    family: "Ground shockwave",
+    terrain: "Traveling ground ruptures",
+    counter: "Wide reach near ground; danger to nearby support.",
+  },
+  "aqua-tail": {
+    behavior: "tidal",
+    family: "Tidal sweep",
+    terrain: "Broad wet strip + displacement",
+    counter: "A broad sweep, with less focused push than Hydro Pump.",
+  },
+  "draco-meteor": {
+    behavior: "meteors",
+    family: "Falling meteors",
+    terrain: "Three physical descending meteors",
+    counter:
+      "Wide coverage; individual meteors can be stopped by higher cover.",
+  },
+  psychic: {
+    behavior: "levitate",
+    family: "Telekinetic lift",
+    terrain: "Suspends, then throws",
+    counter: "Vertical force threatens fall damage; avoid exposed perches.",
+  },
+  flamethrower: {
+    behavior: "flame",
+    family: "Flame sweep",
+    terrain: "Burning strip · 4 HP/turn",
+    counter: "Water extinguishes ground fire; move out of the strip.",
+    description:
+      "Relay Charizard to the landing zone. A sustained flame sweep scorches a strip; ground fire lasts four turns.",
+  },
+  "hydro-pump": {
+    behavior: "stream",
+    family: "Pressure stream",
+    terrain: "Runoff · directional shove",
+    counter: "Higher ground sheds runoff. Avoid the sea edge.",
+    description:
+      "Four connected water pulses follow your arc. Cannon pressure shoves in the direction of travel; runoff wets lower ground.",
+    gravityScale: 0.92,
+  },
+  "water-pulse": {
+    behavior: "water",
+    family: "Expanding pulse",
+    terrain: "Wide wet ground",
+    counter: "Broad coverage, less displacement than Hydro Pump.",
+  },
+  "rock-blast": {
+    behavior: "bounce",
+    family: "Bouncing barrage",
+    terrain: "Three tumbling rocks · 2 bounces",
+    counter: "Slopes redirect rocks; steep cover catches low shots.",
+    description:
+      "Three heavy rocks tumble, bounce twice and roll down slopes before shattering.",
+    gravityScale: 1.1,
+  },
+  "seed-bomb": {
+    behavior: "seeds",
+    family: "Physical cluster",
+    terrain: "Three falling seed fragments",
+    counter: "Wide coverage trades precise damage for spread.",
+    description:
+      "A seed casing bursts into three physical seed fragments. Each falls and collides with the terrain.",
+  },
+  "sludge-bomb": {
+    behavior: "sludge",
+    family: "Sludge cluster",
+    terrain: "Poison patches · 3 HP/turn",
+    counter: "A small persistent zone; leave it before your next turn.",
+  },
+  dig: {
+    behavior: "burrow",
+    family: "Traveling burrow",
+    terrain: "Horizontal tunnel + exit shaft",
+    counter: "Destroys support; can leave a deep crater.",
+    description:
+      "Relay Garchomp to a burrow entry. It excavates a traveling underground route, then bursts out beneath the target.",
+  },
+  thunderbolt: {
+    behavior: "lightning",
+    family: "Sky strike",
+    terrain: "Conducts through connected wet patches",
+    counter: "Stay out of wet ground; dry gaps stop conduction.",
+    description:
+      "Pikachu calls a branching sky strike. Connected wet patches conduct the strike beyond its direct impact.",
+  },
+  "ice-beam": {
+    behavior: "freeze",
+    family: "Freezing beam",
+    terrain: "Freezes wet ground for 4 turns",
+    counter: "Ice melts after four turns; watch your support.",
+    description:
+      "A crisp ice beam excavates its path and freezes wet patches into temporary, solid ice shelves.",
+  },
+  "lava-plume": {
+    behavior: "lava",
+    family: "Molten splash",
+    terrain: "Falling molten globs · burning pools",
+    counter: "Globs spread downhill. Water extinguishes their pools.",
+    description:
+      "A molten core bursts into falling lava globs. Each leaves a burning pool; water extinguishes it.",
+  },
+  "body-slam": {
+    behavior: "slam",
+    family: "Heavy impact",
+    terrain: "Deep crater · strong lift",
+    counter: "Powerful knockback, but a precise landing matters.",
+  },
+  hurricane: {
+    behavior: "vortex",
+    family: "Vortex",
+    terrain: "Sustained pull and lift",
+    counter: "Broad disruption; dangerous near drops.",
+  },
+};
+const anchors = {
+  charizard: [64, -55],
+  blastoise: [44, -68],
+  pikachu: [56, -40],
+  golem: [55, -35],
+  gengar: [58, -45],
+  snorlax: [60, -42],
+  venusaur: [59, -45],
+  alakazam: [60, -52],
+  machamp: [65, -45],
+  gyarados: [60, -68],
+  lapras: [60, -55],
+  dragonite: [60, -52],
+  tyranitar: [60, -50],
+  scizor: [65, -45],
+  espeon: [57, -38],
+  umbreon: [57, -38],
+  typhlosion: [60, -45],
+  garchomp: [65, -50],
+};
 for (const s of roster)
-  for (const m of s.moves) m.color = elementColors[s.element];
+  for (const m of s.moves) {
+    Object.assign(
+      m,
+      {
+        species: s.id,
+        anchor: anchors[s.id],
+        behavior: m.kind,
+        family: {
+          relay: "Relay summon",
+          lob: "Arcing shot",
+          cluster: "Cluster bursts",
+          salvo: "Spread barrage",
+          beam: "Terrain-cutting beam",
+          phase: "Phasing orb",
+          burrow: "Burrow",
+        }[m.kind],
+        terrain: "Crater + " + (m.effect || "impact"),
+        counter: "Terrain, spacing and careful aim matter.",
+      },
+      mechanics[m.id],
+    );
+    m.color = elementColors[s.element];
+  }
+
 export const BALLISTIC = new Set([
   "lob",
   "phase",

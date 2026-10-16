@@ -8,3 +8,5 @@ These are actual Pokémon Black/White animated front sprites, retrieved from the
 - `gifuct-js` decodes the original GIF frame patches in-browser. The original GIFs are preserved without recoloring or redrawing. Runtime canvases compose their disposal/frame metadata and sample at most 28 frames per species to bound memory. Sprite motion and attack choreography are presentation only.
 - All sprites are embedded by Vite in the portable `play.html`; gameplay does not call PokeAPI or download assets. Source downloads use HTTPS with normal certificate verification.
 - Source code, backgrounds, trainer art and move-effect drawing are repository code, separate from these third-party sprite assets. Replacing `src/content.js` and `src/sprites.js` supports a future original-creature version.
+
+Edition 04 adds original programmatically constructed pixel-art trainers in `src/trainers.js`, including animation poses and cosmetic palettes. `src/materials-art.js` supplies original flame, water, debris, charge and ground-material rendering. Neither module imports third-party trainer sheets or official attack-animation footage.

@@ -1,4 +1,6 @@
 import { roster, BALLISTIC, REMOTE } from "./content.js";
+import { makeHeights } from "./landscapes.js";
+import { cleanProfile } from "./trainers.js";
 export const W = 1280,
   H = 680,
   SEA = 632,
@@ -28,41 +30,28 @@ export function blastDamage(base, distance, radius) {
   return Math.round(base * Math.max(0, 1 - distance / radius));
 }
 export class Terrain {
-  constructor(seed = 42, map = "highlands") {
+  constructor(seed = 42, map = "highlands", profile, relief = "normal") {
     this.cells = new Uint8Array(W * H);
     this.map = map;
+    this.profile =
+      profile ||
+      (map === "islands" ? "islands" : map === "sunset" ? "valley" : "rolling");
+    this.relief = relief;
     this.version = 0;
-    this.phase = random(seed)() * 6;
+    this.heights = makeHeights(seed, this.profile, relief);
     for (let x = 28; x < W - 28; x++) {
-      if (map === "islands" && x > 585 && x < 695) continue;
-      const y = this.surface(x);
-      for (let j = y; j < SEA + 12; j++) this.cells[j * W + x] = 1;
-    }
-    // Spawn shelves: flat, wide, with unobstructed headroom.
-    for (const x of [260, 1020]) {
-      const y = this.surface(x);
-      for (let i = x - 37; i <= x + 37; i++)
-        for (let j = 0; j < SEA + 12; j++)
-          this.cells[j * W + i] = j >= y ? 1 : 0;
+      if (this.profile === "islands" && x > 585 && x < 695) continue;
+      for (let y = this.surface(x); y < SEA + 12; y++)
+        this.cells[y * W + x] = 1;
     }
   }
   surface(x) {
-    if (this.map === "sunset")
-      return Math.floor(
-        370 + 82 * Math.sin(x / 310 - 0.5) + 18 * Math.sin(x / 65 + this.phase),
-      );
-    if (this.map === "islands")
-      return Math.floor(
-        410 + 32 * Math.sin(x / 150 + this.phase) + 18 * Math.cos(x / 57),
-      );
-    return Math.floor(
-      430 + 48 * Math.sin(x / 180 + this.phase) + 22 * Math.sin(x / 75),
-    );
+    return this.heights[Math.max(0, Math.min(W - 1, Math.floor(x)))];
   }
   solid(x, y) {
     x = Math.floor(x);
     y = Math.floor(y);
-    return x >= 0 && x < W && y >= 0 && y < H && this.cells[y * W + x] === 1;
+    return x >= 0 && x < W && y >= 0 && y < H && this.cells[y * W + x] > 0;
   }
   circle(x, y, r, fill = 0) {
     let changed = false;
@@ -106,18 +95,24 @@ export function angleVector(angle) {
 export function speedFor(power) {
   return 260 + power * 5.6;
 }
-export function originFor(player, angle) {
+export function originFor(player, angle, move) {
   const dir = Math.cos((angle * Math.PI) / 180) >= 0 ? 1 : -1;
   // Shared muzzle for preview and attacks; summons are visual actors, not extra colliders.
-  return { x: player.x + dir * 55, y: player.y - 42 };
+  const anchor = move && !REMOTE.has(move.kind) ? move.anchor : null;
+  return {
+    x: player.x + dir * (anchor?.[0] || 55),
+    y: player.y + (anchor?.[1] || -42),
+  };
 }
 // One authoritative projectile integrator is used by previews, AI and live shots.
 export function advanceProjectile(battle, shot, move, owner) {
   shot.age += DT;
   shot.vx += battle.wind * DT;
-  shot.vy += GRAVITY * DT;
+  shot.vy += GRAVITY * (move.gravityScale || 1) * DT;
   const steps = Math.max(1, Math.ceil((Math.hypot(shot.vx, shot.vy) * DT) / 3));
   for (let i = 0; i < steps; i++) {
+    const previousX = shot.x,
+      previousY = shot.y;
     shot.x += (shot.vx * DT) / steps;
     shot.y += (shot.vy * DT) / steps;
     const rival = battle.players[1 - owner];
@@ -128,6 +123,27 @@ export function advanceProjectile(battle, shot, move, owner) {
     const terrain =
       battle.terrain.solid(shot.x, shot.y) &&
       (move.kind !== "phase" || (shot.vy > 0 && shot.age > 0.2));
+    if (
+      terrain &&
+      !direct &&
+      shot.bounces > 0 &&
+      Math.hypot(shot.vx, shot.vy) > 100 &&
+      shot.age > 0.12
+    ) {
+      shot.bounces--;
+      const wall =
+        battle.terrain.solid(shot.x, previousY - 5) &&
+        !battle.terrain.solid(previousX, previousY - 5);
+      shot.x = previousX;
+      shot.y = previousY - 3;
+      if (wall) shot.vx *= -0.62;
+      else {
+        shot.vx *= 0.72;
+        shot.vy = -Math.abs(shot.vy) * 0.48 - 26;
+      }
+      if (wall) shot.vy = -Math.abs(shot.vy) * 0.35 - 30;
+      return null;
+    }
     if (
       direct ||
       terrain ||
@@ -145,8 +161,8 @@ export function advanceProjectile(battle, shot, move, owner) {
   }
   return null;
 }
-export function makeProjectile(player, angle, power, delay = 0) {
-  const o = originFor(player, angle),
+export function makeProjectile(player, angle, power, delay = 0, move) {
+  const o = originFor(player, angle, move),
     d = angleVector(angle);
   return {
     ...o,
@@ -154,6 +170,8 @@ export function makeProjectile(player, angle, power, delay = 0) {
     vy: d.y * speedFor(power),
     age: 0,
     delay,
+    bounces: move?.behavior === "bounce" ? 2 : 0,
+    history: [],
   };
 }
 export function traceShot(
@@ -165,9 +183,9 @@ export function traceShot(
   samples = true,
 ) {
   const p = battle.players[owner],
-    o = originFor(p, angle);
+    o = originFor(p, angle, move);
   if (BALLISTIC.has(move.kind)) {
-    const shot = makeProjectile(p, angle, power),
+    const shot = makeProjectile(p, angle, power, 0, move),
       points = [{ ...o }];
     for (let tick = 0; tick < 540; tick++) {
       const hit = advanceProjectile(battle, shot, move, owner);
@@ -221,14 +239,20 @@ export class Battle {
       throw new Error("Invalid drafted teams");
     this.options.teams = teams.map((team) => [...team]);
     this.rng = random(this.options.seed + 19);
-    this.terrain = new Terrain(this.options.seed, this.options.map);
+    this.terrain = new Terrain(
+      this.options.seed,
+      this.options.map,
+      this.options.landscape,
+      this.options.relief,
+    );
     this.players = [260, 1020].map((x, i) => ({
       x,
       y: this.terrain.top(x) - 19,
       vx: 0,
       vy: 0,
-      hp: RULES.hp,
-      name: i ? "RIVER" : "EMBER",
+      hp: [180, 240, 300].includes(+options.hp) ? +options.hp : RULES.hp,
+      profile: cleanProfile(options.profiles?.[i], i),
+      name: cleanProfile(options.profiles?.[i], i).name.toUpperCase(),
       wet: 0,
       burn: 0,
       curse: 0,
@@ -249,7 +273,13 @@ export class Battle {
       lastWalk: -1,
       hurt: 0,
     }));
-    this.active = 0;
+    this.maxHP = this.players[0].hp;
+    this.active =
+      this.options.mode === "practice" ? 0 : options.first === 1 ? 1 : 0;
+    this.opening = this.active;
+    this.hazards = [];
+    this.ice = [];
+    this.lastShots = [null, null];
     this.phase = "aim";
     this.phaseTime = 0;
     this.budget = RULES.movement;
@@ -349,7 +379,7 @@ export class Battle {
     this.setPhase("summon");
     this.attack = null;
     this.stable = 0;
-    const o = originFor(p, angle);
+    const o = originFor(p, angle, m);
     this.summon = {
       species,
       speciesIndex,
@@ -364,6 +394,13 @@ export class Battle {
     p.shots++;
     p.ammo[m.id]--;
     p.cooldowns[m.id] = m.cooldown + 1;
+    this.lastShots[this.active] = {
+      angle,
+      power,
+      species: speciesIndex,
+      move: moveIndex,
+      trace: traceShot(this, m, angle, power).points,
+    };
     this.addLog(`${p.name} summoned ${species.name} · ${m.name}`);
     this.emit("summon", { x: o.x, y: p.y - 20, color: species.color });
     return true;
@@ -441,10 +478,17 @@ export class Battle {
         i,
         damage,
         this.active,
-        Math.sign(p.x - x || this.players[this.active].facing) *
+        (move.impactDX ??
+          Math.sign(p.x - x || this.players[this.active].facing)) *
           move.force *
           scale,
-        -move.force * (move.pattern === "lift" ? 1.35 : 0.7) * scale,
+        -move.force *
+          (move.behavior === "stream"
+            ? 0.35
+            : move.pattern === "lift"
+              ? 1.35
+              : 0.7) *
+          scale,
         move.effect,
       );
     }
@@ -461,6 +505,69 @@ export class Battle {
     });
   }
   resolveImpact(x, y, m, directIndex = -1) {
+    if (m.behavior === "seeds" && !m.fragment) {
+      this.emit("burst", {
+        x,
+        y,
+        color: m.color,
+        radius: m.radius,
+        kind: m.id,
+        visual: m.visual,
+      });
+      for (const [i, vx] of [-105, 0, 105].entries())
+        this.projectiles.push({
+          x,
+          y: y - 12,
+          vx,
+          vy: -140 - i * 17,
+          age: 0,
+          delay: 0,
+          bounces: 0,
+          history: [],
+          move: {
+            ...m,
+            behavior: "fragment",
+            kind: "fragment",
+            fragment: true,
+            damage: m.damage / 3,
+            force: m.force * 0.4,
+            radius: 34,
+            terrainRadius: 22,
+          },
+        });
+      return;
+    }
+    if (m.behavior === "meteors" && !m.fragment) {
+      this.emit("burst", {
+        x,
+        y,
+        color: m.color,
+        radius: m.radius,
+        kind: m.id,
+        visual: m.visual,
+      });
+      for (const [i, dx] of [-62, 0, 62].entries())
+        this.projectiles.push({
+          x: Math.max(8, Math.min(W - 8, x + dx - 35)),
+          y: Math.max(-80, y - 270),
+          vx: 55,
+          vy: 210,
+          age: 0,
+          delay: i * 0.15,
+          bounces: 0,
+          history: [],
+          move: {
+            ...m,
+            behavior: "meteor-fragment",
+            kind: "fragment",
+            fragment: true,
+            damage: m.damage / 3,
+            force: m.force * 0.4,
+            terrainRadius: 26,
+          },
+        });
+      return;
+    }
     if (m.kind === "cluster") {
       const offsets = m.pattern === "meteor" ? [-62, 0, 62] : [-38, 0, 38];
       offsets.forEach((dx, i) => {
@@ -501,7 +608,50 @@ export class Battle {
     ].includes(m.pattern)
       ? Math.min(40, m.radius)
       : m.radius;
-    this.hit(x, y, { ...m, terrainRadius }, directIndex);
+    this.hit(
+      x,
+      y,
+      { ...m, terrainRadius: m.behavior === "stream" ? 18 : terrainRadius },
+      directIndex,
+    );
+    if (["stream", "water"].includes(m.behavior))
+      for (const dx of [-24, 0, 24])
+        this.addHazard("water", x + dx, y, m.behavior === "water" ? 36 : 26);
+    if (m.behavior === "tidal")
+      for (let dx = -100; dx <= 100; dx += 25)
+        this.addHazard("water", x + dx, y, 25);
+    if (m.behavior === "firecross")
+      for (const dx of [-48, 0, 48])
+        this.addHazard("fire", x + dx, y, 16, this.active, 2);
+    if (m.behavior === "flame")
+      for (const dx of [-55, -28, 0, 28, 55])
+        this.addHazard("fire", x + dx, y, 20);
+    if (m.behavior === "sludge") this.addHazard("poison", x, y, 34);
+    if (m.behavior === "lava" && !m.fragment) {
+      for (const [i, vx] of [-120, -55, 55, 120].entries())
+        this.projectiles.push({
+          x,
+          y: y - 14,
+          vx,
+          vy: -160 - (i % 2) * 30,
+          age: 0,
+          delay: 0,
+          bounces: 0,
+          history: [],
+          move: {
+            ...m,
+            fragment: true,
+            behavior: "ember",
+            kind: "fragment",
+            damage: 3,
+            force: 35,
+            radius: 22,
+            terrainRadius: 12,
+          },
+        });
+    }
+    if (m.behavior === "ember") this.addHazard("lava", x, y, 24);
+    if (m.behavior === "lightning") this.conduct(x, y, m);
     if (m.pattern === "cross")
       for (const [dx, dy] of [
         [-48, 0],
@@ -515,7 +665,31 @@ export class Battle {
         this.terrain.circle(x + t, y + t, 13);
         this.terrain.circle(x + t, y - t, 13);
       }
-    if (m.pattern === "seismic" || m.pattern === "sweep")
+    if (m.behavior === "quake") {
+      for (let d = 24; d <= 120; d += 24)
+        for (const sign of [-1, 1]) {
+          const px = x + d * sign,
+            py = this.terrain.top(px, Math.max(0, y - 65));
+          this.pendingImpacts.push({
+            delay: d / 180,
+            x: px,
+            y: py + 3,
+            move: {
+              ...m,
+              damage: 0,
+              force: 18,
+              radius: 20,
+              terrainRadius: 18,
+              fragment: true,
+            },
+            directIndex: -1,
+          });
+        }
+    }
+    if (
+      (m.pattern === "seismic" && m.behavior !== "quake") ||
+      m.pattern === "sweep"
+    )
       for (let dx = -120; dx <= 120; dx += 22) {
         const px = x + dx,
           py = this.terrain.top(px, Math.max(0, y - 65));
@@ -546,13 +720,15 @@ export class Battle {
       p = this.players[this.active];
     this.emit("attack", { kind: m.kind, visual: m.visual, color: m.color });
     if (BALLISTIC.has(m.kind)) {
-      const count = m.kind === "salvo" ? m.count : 1;
+      const count =
+        m.behavior === "stream" ? 4 : m.kind === "salvo" ? m.count : 1;
       this.projectiles = Array.from({ length: count }, (_, i) =>
         makeProjectile(
           p,
           s.angle + (i - (count - 1) / 2) * (m.spread || 0),
           s.power,
-          i * 0.085,
+          i * (m.behavior === "stream" ? 0.07 : 0.085),
+          m,
         ),
       );
       this.projectile = this.projectiles[0];
@@ -576,6 +752,30 @@ export class Battle {
       prev = a.progress;
     a.progress = Math.min(1, this.phaseTime / a.duration);
     if (a.remote) {
+      if (m.behavior === "burrow" && a.progress > 0.22 && a.progress < 0.6) {
+        const q = Math.min(1, (a.progress - 0.22) / 0.36),
+          dir = this.players[this.active].facing;
+        a.burrowX = a.x - dir * 130 * (1 - q);
+        a.burrowY = a.y + 44;
+        this.terrain.circle(a.burrowX, a.burrowY, 25);
+        if (q < 0.15)
+          for (let y = a.y - 5; y < a.y + 45; y += 8)
+            this.terrain.circle(a.x - dir * 130, y, 23);
+      }
+      if (m.behavior === "levitate" && a.progress > 0.24 && a.progress < 0.58)
+        for (const p of this.players) {
+          if (p.hp > 0 && Math.hypot(p.x - a.x, p.y - a.y) < m.radius + 35) {
+            p.vy = -55;
+            p.vx *= 0.98;
+          }
+        }
+      if (m.behavior === "vortex" && a.progress > 0.25 && a.progress < 0.85)
+        for (const p of this.players) {
+          if (p.hp > 0 && Math.hypot(p.x - a.x, p.y - a.y) < m.radius + 55) {
+            p.vx += (a.x - p.x) * DT * 2;
+            p.vy -= 160 * DT;
+          }
+        }
       if (a.progress >= 0.58 && !a.resolved) {
         a.resolved = true;
         this.resolveImpact(a.x, a.y, m, a.directIndex);
@@ -608,20 +808,27 @@ export class Battle {
         this.terrain.circle(x, y, m.radius);
       }
     }
-    if (a.progress === 1) this.setPhase("settle");
+    if (a.progress === 1) {
+      if (m.behavior === "freeze") this.freezeWater(a);
+      this.setPhase("settle");
+    }
   }
   advanceFlights() {
-    const m = this.currentMove,
-      alive = [];
-    for (const shot of this.projectiles) {
+    const flying = this.projectiles;
+    this.projectiles = [];
+    for (const shot of flying) {
+      const m = shot.move || this.currentMove;
       if (shot.delay > 0) {
         shot.delay -= DT;
-        alive.push(shot);
+        this.projectiles.push(shot);
         continue;
       }
+      shot.history.push({ x: shot.x, y: shot.y });
+      if (shot.history.length > (m.behavior === "stream" ? 240 : 30))
+        shot.history.shift();
       const hit = advanceProjectile(this, shot, m, this.active);
       if (!hit) {
-        alive.push(shot);
+        this.projectiles.push(shot);
         continue;
       }
       if (REMOTE.has(m.kind)) {
@@ -632,7 +839,9 @@ export class Battle {
           y,
           origin: { x: this.summon.x, y: this.summon.y },
           progress: 0,
-          duration: ["body-slam", "eruption", "dragon-rush"].includes(m.id)
+          duration: ["body-slam", "eruption", "dragon-rush", "dig"].includes(
+            m.id,
+          )
             ? 1.35
             : 1.1,
           remote: true,
@@ -647,12 +856,187 @@ export class Battle {
           visual: m.visual,
         });
         this.setPhase("attack");
-      } else this.resolveImpact(hit.x, hit.y, m, hit.directIndex);
+      } else {
+        const impact =
+          m.behavior === "stream"
+            ? {
+                ...m,
+                damage: m.damage / 4,
+                force: m.force * 0.24,
+                impactDX: Math.sign(shot.vx),
+              }
+            : m;
+        this.resolveImpact(hit.x, hit.y, impact, hit.directIndex);
+      }
       this.emit("landing", { x: hit.x, y: hit.y, owner: this.active });
     }
-    this.projectiles = alive;
-    this.projectile = alive[0] || null;
-    if (this.phase === "flight" && !alive.length) this.setPhase("settle");
+    this.projectile = this.projectiles[0] || null;
+    if (this.phase === "flight" && !this.projectiles.length)
+      this.setPhase("settle");
+  }
+  addHazard(type, x, y, radius, owner = this.active, life = 4) {
+    if (x < 28 || x > W - 28) return;
+    y = Math.min(SEA - 2, this.terrain.top(x, Math.max(0, y - 35)));
+    if (type === "water")
+      this.hazards = this.hazards.filter(
+        (h) =>
+          !["fire", "lava"].includes(h.type) ||
+          Math.abs(h.x - x) > h.radius + radius,
+      );
+    if (
+      ["fire", "lava"].includes(type) &&
+      this.hazards.some(
+        (h) =>
+          h.type === "water" &&
+          Math.abs(h.x - x) < h.radius + radius &&
+          Math.abs(h.y - y) < 45,
+      )
+    )
+      return;
+    const prior = this.hazards.find(
+      (h) =>
+        h.type === type && Math.abs(h.x - x) < 22 && Math.abs(h.y - y) < 30,
+    );
+    if (prior) {
+      prior.expires = Math.max(prior.expires, this.turn + life);
+      return;
+    }
+    if (this.hazards.length >= 100) this.hazards.shift();
+    this.hazards.push({
+      type,
+      x,
+      y,
+      radius,
+      owner,
+      expires: this.turn + life,
+      flow: type === "water" ? 1 : 0,
+      hit: [-1, -1],
+    });
+  }
+  updateHazards() {
+    for (const h of this.hazards) {
+      if (h.flow > 0) {
+        h.flow = Math.max(0, h.flow - DT);
+        const base = this.terrain.top(h.x, Math.max(0, h.y - 28)),
+          left = this.terrain.top(h.x - 12, Math.max(0, h.y - 28)),
+          right = this.terrain.top(h.x + 12, Math.max(0, h.y - 28));
+        const dir = left > right ? -1 : 1;
+        if (Math.max(left, right) > base + 1)
+          h.x = Math.max(29, Math.min(W - 29, h.x + dir * 65 * DT));
+      }
+      h.y = Math.min(SEA - 2, this.terrain.top(h.x, Math.max(0, h.y - 28)));
+      for (let i = 0; i < 2; i++) {
+        const p = this.players[i];
+        if (
+          p.hp <= 0 ||
+          Math.abs(p.x - h.x) > h.radius + 7 ||
+          Math.abs(p.y + 18 - h.y) > 30
+        )
+          continue;
+        if (h.type === "water") {
+          p.wet = Math.max(2, p.wet);
+          p.burn = 0;
+        } else if (
+          this.phase === "aim" &&
+          this.active === i &&
+          h.hit[i] !== this.turn
+        ) {
+          // One ground-hazard hit per trainer per turn, even across overlapping patches.
+          if (
+            !this.hazards.some(
+              (other) =>
+                other !== h &&
+                other.type !== "water" &&
+                other.hit[i] === this.turn,
+            )
+          )
+            this.damagePlayer(
+              i,
+              h.type === "lava" ? 6 : h.type === "poison" ? 3 : 4,
+              h.owner,
+              0,
+              0,
+              null,
+              true,
+            );
+          h.hit[i] = this.turn;
+        }
+      }
+    }
+  }
+  conduct(x, y, m) {
+    const wet = this.hazards.filter((h) => h.type === "water"),
+      connected = new Set(
+        wet.filter((h) => Math.hypot(h.x - x, h.y - y) < h.radius + m.radius),
+      );
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const h of wet)
+        if (
+          !connected.has(h) &&
+          [...connected].some(
+            (a) => Math.hypot(a.x - h.x, a.y - h.y) < a.radius + h.radius + 12,
+          )
+        ) {
+          connected.add(h);
+          changed = true;
+        }
+    }
+    for (const h of connected)
+      this.emit("conduction", { x, y, ex: h.x, ey: h.y, color: m.color });
+    for (let i = 0; i < 2; i++) {
+      const p = this.players[i];
+      if (
+        p.hp > 0 &&
+        Math.hypot(p.x - x, p.y - y) > m.radius + 32 &&
+        [...connected].some(
+          (h) =>
+            Math.abs(p.x - h.x) < h.radius + 10 &&
+            Math.abs(p.y + 18 - h.y) < 38,
+        )
+      )
+        this.damagePlayer(i, 14, this.active, 0, -35, "electric");
+    }
+  }
+  freezeWater(a) {
+    for (const h of this.hazards.filter((h) => h.type === "water")) {
+      const dx = a.x - a.origin.x,
+        dy = a.y - a.origin.y,
+        l = dx * dx + dy * dy;
+      const q = Math.max(
+        0,
+        Math.min(
+          1,
+          ((h.x - a.origin.x) * dx + (h.y - a.origin.y) * dy) / (l || 1),
+        ),
+      );
+      if (Math.hypot(a.origin.x + dx * q - h.x, a.origin.y + dy * q - h.y) > 38)
+        continue;
+      const cells = [];
+      for (
+        let x = Math.max(28, Math.floor(h.x - h.radius));
+        x < Math.min(W - 28, h.x + h.radius);
+        x++
+      )
+        for (let y = Math.max(0, Math.floor(h.y - 8)); y < h.y + 2; y++) {
+          const idx = y * W + x;
+          if (!this.terrain.cells[idx]) {
+            this.terrain.cells[idx] = 2;
+            cells.push(idx);
+          }
+        }
+      this.ice.push({
+        cells,
+        x: h.x,
+        y: h.y,
+        radius: h.radius,
+        expires: this.turn + 4,
+      });
+      this.terrain.version++;
+      h.expires = this.turn;
+    }
+    this.hazards = this.hazards.filter((h) => h.expires > this.turn);
   }
   physics() {
     for (let index = 0; index < 2; index++) {
@@ -714,12 +1098,15 @@ export class Battle {
     this.clock += DT;
     this.phaseTime += DT;
     this.physics();
+    this.updateHazards();
     const waiting = [];
     for (const impact of this.pendingImpacts) {
       impact.delay -= DT;
-      if (impact.delay <= 0)
+      if (impact.delay <= 0) {
         this.hit(impact.x, impact.y, impact.move, impact.directIndex);
-      else waiting.push(impact);
+        if (impact.move.behavior === "sludge")
+          this.addHazard("poison", impact.x, impact.y, 26);
+      } else waiting.push(impact);
     }
     this.pendingImpacts = waiting;
     if (this.phase === "aim") {
@@ -728,10 +1115,18 @@ export class Battle {
         this.timer -= DT;
         if (this.timer <= 0) this.pass();
       }
-    } else if (this.phase === "summon" && this.phaseTime >= 0.95) this.launch();
+    } else if (
+      this.phase === "summon" &&
+      this.phaseTime >= (this.summon.remote ? 0.45 : 0.95)
+    )
+      this.launch();
     else if (this.phase === "flight") this.advanceFlights();
     else if (this.phase === "attack") this.advanceAttack();
     else if (this.phase === "settle") {
+      if (this.projectiles.length) {
+        this.advanceFlights();
+        return;
+      }
       const settled = this.players.every(
         (p) => p.hp <= 0 || (p.grounded && Math.abs(p.vx) < 1 && p.vy === 0),
       );
@@ -779,6 +1174,14 @@ export class Battle {
     }
     this.active = this.options.mode === "practice" ? 0 : 1 - this.active;
     this.turn++;
+    this.hazards = this.hazards.filter((h) => h.expires > this.turn);
+    for (const shelf of this.ice)
+      if (shelf.expires <= this.turn) {
+        for (const idx of shelf.cells)
+          if (this.terrain.cells[idx] === 2) this.terrain.cells[idx] = 0;
+        this.terrain.version++;
+      }
+    this.ice = this.ice.filter((s) => s.expires > this.turn);
     const p = this.players[this.active];
     for (const id of Object.keys(p.cooldowns))
       p.cooldowns[id] = Math.max(0, p.cooldowns[id] - 1);
@@ -808,6 +1211,20 @@ export class Battle {
     this.addLog(`Turn ${this.turn} · ${p.name} takes the field.`);
     this.emit("turn");
   }
+  fork() {
+    const copy = Object.create(Battle.prototype);
+    for (const key of Object.keys(this))
+      if (!["terrain", "rng", "events"].includes(key))
+        copy[key] = structuredClone(this[key]);
+    copy.terrain = Object.create(Terrain.prototype);
+    Object.assign(copy.terrain, this.terrain, {
+      cells: this.terrain.cells.slice(),
+      heights: this.terrain.heights.slice(),
+    });
+    copy.rng = random(this.rng.state);
+    copy.events = [];
+    return copy;
+  }
   stateHash() {
     let h = 2166136261;
     const append = (v) => {
@@ -834,6 +1251,9 @@ export class Battle {
         species: this.summon.species.id,
       },
       winner: this.winner,
+      hazards: this.hazards,
+      ice: this.ice,
+      lastShots: this.lastShots,
     });
     for (let i = 0; i < state.length; i++) append(state.charCodeAt(i));
     return (h >>> 0).toString(16);

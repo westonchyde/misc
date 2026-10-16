@@ -16,7 +16,13 @@ export function randomTeams(seed = 42) {
   );
   return [all.slice(0, TEAM_SIZE), all.slice(TEAM_SIZE, TEAM_SIZE * 2)];
 }
-export function draftScore(index, own = [], rival = [], difficulty = "normal") {
+export function draftScore(
+  index,
+  own = [],
+  rival = [],
+  difficulty = "normal",
+  context = {},
+) {
   const s = roster[index],
     profile = difficultyProfiles[difficulty] || difficultyProfiles.normal;
   let value = s.moves.reduce(
@@ -47,13 +53,35 @@ export function draftScore(index, own = [], rival = [], difficulty = "normal") {
     )
       value += 0.5;
   }
+  if (difficulty !== "easy") {
+    if (
+      ["mountain", "mesa"].includes(context.landscape) &&
+      s.moves.some(
+        (m) =>
+          m.kind === "beam" || m.kind === "phase" || m.behavior === "burrow",
+      )
+    )
+      value += 3;
+    if (context.landscape === "islands" && s.moves.some((m) => m.force >= 200))
+      value += 2;
+    if (
+      ["valley", "basin"].includes(context.landscape) &&
+      s.moves.some((m) => ["lava", "water", "flame"].includes(m.behavior))
+    )
+      value += 2;
+    const ownFamilies = new Set(
+      own.flatMap((i) => roster[i].moves.map((m) => m.family)),
+    );
+    value += s.moves.filter((m) => !ownFamilies.has(m.family)).length * 0.7;
+  }
   return value;
 }
 export class Draft {
-  constructor(seed = 42, mode = "solo", difficulty = "normal") {
+  constructor(seed = 42, mode = "solo", difficulty = "normal", context = {}) {
     this.seed = seed;
     this.mode = mode;
     this.difficulty = difficulty;
+    this.context = context;
     this.rng = random(seed + 700);
     this.pool = shuffle(
       roster.map((_, i) => i),
@@ -94,12 +122,14 @@ export class Draft {
             this.teams[this.active],
             this.teams[1 - this.active],
             this.difficulty,
+            this.context,
           ) -
           draftScore(
             a,
             this.teams[this.active],
             this.teams[1 - this.active],
             this.difficulty,
+            this.context,
           ),
       )[0];
     return this.pick(index);

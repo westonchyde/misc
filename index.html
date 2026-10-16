@@ -11,7 +11,7 @@
       <a href="#" id="brand" aria-label="Battlefront home"
         ><span class="brand-ball">◒</span
         ><span>BATTLEFRONT<small>POKÉMON · TRAINER ARENA</small></span></a
-      ><span class="version">FAN EDITION <i>03</i></span>
+      ><span class="version">FAN EDITION <i>04</i></span>
       <nav>
         <button id="help" class="quiet">? <span>Field guide</span></button
         ><button id="settings" class="quiet">⚙ <span>Settings</span></button
@@ -81,6 +81,22 @@
               <legend>02 <span>CHOOSE YOUR GROUND</span></legend>
               <div id="map-picker"></div>
               <p id="map-description" class="muted"></p>
+              <div class="setup-options">
+                <label>Terrain shape<select id="landscape"></select></label
+                ><label
+                  >Elevation<select id="relief">
+                    <option value="normal">Natural</option>
+                    <option value="dramatic">Dramatic</option>
+                  </select></label
+                >
+              </div>
+              <canvas
+                id="terrain-preview"
+                width="640"
+                height="250"
+                aria-label="Exact terrain preview with starting positions"
+              ></canvas>
+              <p id="landscape-hint" class="muted"></p>
             </fieldset>
             <div class="setup-options">
               <label
@@ -99,6 +115,41 @@
                 </select></label
               >
             </div>
+            <div class="setup-options">
+              <button id="reroll-map" type="button">↻ New landscape seed</button
+              ><label
+                >Aiming style<select id="aim-style">
+                  <option value="classic">Classic · manual aiming</option>
+                  <option value="assisted">
+                    Assisted · target + full guide
+                  </option>
+                </select></label
+              >
+            </div>
+            <details class="setup-details">
+              <summary>Your trainers & match rules</summary>
+              <div id="trainer-customization" class="trainer-editors"></div>
+              <div class="setup-options">
+                <label
+                  >Match length<select id="match-hp">
+                    <option value="180">Quick · 180 HP</option>
+                    <option value="240" selected>Standard · 240 HP</option>
+                    <option value="300">Endurance · 300 HP</option>
+                  </select></label
+                ><label
+                  >Opening turn<select id="first-player">
+                    <option value="random">Seeded coin toss</option>
+                    <option value="0">Player 1</option>
+                    <option value="1">Player 2</option>
+                  </select></label
+                >
+              </div>
+              <label class="check"
+                ><input id="series-option" type="checkbox" checked />
+                Best-of-three series
+                <span>opening player alternates</span></label
+              >
+            </details>
             <label class="check"
               ><input type="checkbox" id="timer-option" checked /> 45-second
               turns <span>off in practice</span></label
@@ -118,6 +169,13 @@
               </p>
             </fieldset>
             <p id="difficulty-description" class="muted"></p>
+            <label class="check"
+              ><input id="setup-sound" type="checkbox" /> Sound effects
+              <span>material-specific attack audio</span></label
+            >
+            <button id="learn" class="quiet">
+              ◎ Learn to aim · interactive practice
+            </button>
             <p id="asset-status" role="status">
               Loading original animated sprites…
             </p>
@@ -158,20 +216,39 @@
           <div>
             <p class="eyebrow">18 POKÉMON / 36 MOVES / SIX PICKS EACH</p>
             <h1>Your pick. Their problem.</h1>
-            <p class="muted">
+            <p class="muted" id="draft-order">
               A Pocket Tanks-style snake draft: Ember, River, River, Ember.
               Every pick takes a Pokémon out of the shared pool.
             </p>
           </div>
           <button id="draft-back" class="quiet">← Battle setup</button>
         </div>
+        <div class="draft-map">
+          <canvas
+            id="draft-map-preview"
+            width="640"
+            height="220"
+            aria-label="Terrain and spawns for this draft"
+          ></canvas>
+          <div>
+            <p class="eyebrow">KNOW YOUR BATTLEFIELD</p>
+            <h3 id="draft-map-name"></h3>
+            <p id="draft-map-info" class="muted"></p>
+          </div>
+        </div>
         <div class="draft-teams">
           <section>
-            <h2>● EMBER <span id="draft-count-0">0 / 6</span></h2>
+            <h2>
+              <b id="draft-name-0">● EMBER</b>
+              <span id="draft-count-0">0 / 6</span>
+            </h2>
             <div id="draft-team-0" class="draft-slots"></div>
           </section>
           <section>
-            <h2>◆ RIVER <span id="draft-count-1">0 / 6</span></h2>
+            <h2>
+              <b id="draft-name-1">◆ RIVER</b>
+              <span id="draft-count-1">0 / 6</span>
+            </h2>
             <div id="draft-team-1" class="draft-slots"></div>
           </section>
         </div>
@@ -179,12 +256,34 @@
           <strong id="draft-turn" aria-live="polite"></strong
           ><span id="draft-last"></span>
         </div>
-        <div id="draft-pool"></div>
+        <div class="draft-layout">
+          <div id="draft-pool"></div>
+          <aside
+            id="draft-inspector"
+            aria-label="Inspect Pokémon before drafting"
+          >
+            <p class="eyebrow">SCOUT YOUR NEXT PICK</p>
+            <h2 id="inspect-name"></h2>
+            <p id="inspect-role" class="muted"></p>
+            <canvas
+              id="inspect-preview"
+              width="640"
+              height="340"
+              aria-label="Live demonstration of the inspected move"
+            ></canvas>
+            <div id="inspect-move-tabs"></div>
+            <div id="inspect-details"></div>
+            <button id="draft-confirm" class="primary">
+              Draft this Pokémon →
+            </button>
+            <p id="inspect-reason" class="muted" role="status"></p>
+          </aside>
+        </div>
         <div class="draft-actions">
           <button id="draft-random">⚄ Randomize both teams</button
           ><button id="draft-reset">Reset draft</button>
           <p id="draft-help">
-            Choose a Pokémon to draft it. Both of its moves come with it.
+            Inspect a Pokémon, then confirm your pick. Both moves come with it.
           </p>
           <button id="draft-begin" class="primary" disabled>
             Enter the battlefield →
@@ -192,6 +291,15 @@
         </div>
       </section>
       <section id="battle-screen" hidden aria-label="Trainer battle">
+        <div id="tutorial-card" hidden>
+          <div>
+            <p class="eyebrow" id="lesson-count"></p>
+            <strong id="lesson-title"></strong>
+            <p id="lesson-body"></p>
+          </div>
+          <button id="lesson-next" class="primary">Next →</button
+          ><button id="lesson-exit" class="quiet">Exit lesson</button>
+        </div>
         <div class="battle-top">
           <div>
             <p class="eyebrow" id="map-tag"></p>
@@ -278,6 +386,7 @@
             <p id="fire-reason"></p>
           </div>
         </section>
+        <div id="shot-summary" class="shot-summary" role="status"></div>
         <div class="battle-bottom">
           <div class="movement-controls">
             <button id="move-left" aria-label="Move left">A ←</button
@@ -320,11 +429,12 @@
           <b>02</b>
           <h3>Aim with confidence.</h3>
           <p>
-            Click a landing area to find an arc, or use the sliders for classic
-            manual aiming. Hold Shift while clicking for direct aim. Flip
-            direction with F. Dots show the predicted arc; a ring marks the
-            impact. Power changes arcs and relay landings, not beams. Space
-            commits the attack.
+            Classic aiming uses angle and power; a gold arrow always shows
+            direction. Assisted aiming finds an arc to a clicked landing area.
+            Hold Shift while clicking for direct aim. Flip direction with F.
+            Dots show the predicted arc; a ring marks the impact when Full guide
+            is enabled. The short guide shows only the launch. Power changes
+            arcs and relay landings, not beams. Space commits the attack.
           </p>
         </article>
         <article>
@@ -345,13 +455,15 @@
             deals 50% more to wet trainers. Fire burns for 4 HP on each of two
             turns. Curse halves the rival’s next movement budget. Primaries have
             three shots and secondaries two. Strong moves also recharge. Ice
-            slows wet targets; sludge poisons; Snarl weakens the next attack. If
-            all shots are exhausted, remaining HP decides the winner.
+            slows targets; sludge poisons; Snarl weakens the next attack. Wet
+            ground conducts Thunderbolt and can be frozen into temporary
+            shelves. Ground labels show remaining turns. If all shots are
+            exhausted, remaining HP decides the winner.
           </p>
         </article>
       </div>
       <p class="callout">
-        Trainers have 180 HP. Falls can hurt; the sea is fatal. Blast damage
+        Trainers have 180–300 HP. Falls can hurt; the sea is fatal. Blast damage
         fades with distance and is reduced by solid cover. Pokémon are summoned
         attackers and do not take damage in Trainer Battle.
       </p>
@@ -400,10 +512,27 @@
             >Click a landing area to find an arc. Shift-click uses manual
             direction.</small
           ></span
-        ><input id="targeting-option" type="checkbox" checked
+        ><input id="targeting-option" type="checkbox"
+      /></label>
+      <label class="setting-row"
+        ><span
+          ><strong>Guide length</strong
+          ><small>Direction arrow is always visible</small></span
+        ><select id="guide-length">
+          <option value="short">Short arc</option>
+          <option value="full">Full prediction</option>
+        </select></label
+      >
+      <label class="setting-row"
+        ><span
+          ><strong>Previous shot</strong
+          ><small>Remember the last path, angle and power</small></span
+        ><input id="history-option" type="checkbox" checked
       /></label>
       <p class="muted">
-        Preferences save on this browser. Match state does not.
+        Classic aiming uses manual angle and power. Assisted targeting is
+        independent of CPU difficulty. Preferences save on this browser. Match
+        state does not.
       </p>
       <button class="primary" data-close="settings-dialog">
         Back to the field
@@ -423,10 +552,13 @@
       <p class="eyebrow">THE DUST HAS SETTLED</p>
       <h2 id="winner"></h2>
       <p id="result-subtitle"></p>
+      <p id="series-score" class="series-score"></p>
       <div id="result-stats"></div>
       <div class="dialog-actions">
         <button id="rematch" class="primary">Rematch →</button
-        ><button id="result-menu">Choose a new battlefield</button>
+        ><button id="new-seed">New seed · same teams</button
+        ><button id="redraft">Redraft teams</button
+        ><button id="result-menu">Battle setup</button>
       </div>
     </dialog>
     <dialog id="log-dialog">

@@ -1,6 +1,6 @@
 {
   "name": "battlefront",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,10 @@
     "test": "node --test",
     "test:browser": "node checks/browser.mjs && node checks/effects.mjs",
     "test:portable": "node checks/portable.mjs",
-    "benchmark:ai": "node checks/ai-benchmark.mjs"
+    "benchmark:ai": "node checks/ai-benchmark.mjs",
+    "test:revision": "node checks/revision.mjs",
+    "test:terrain": "node checks/terrain-reach.mjs",
+    "showcase": "node checks/showcase.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.0",

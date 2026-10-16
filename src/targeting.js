@@ -5,7 +5,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export function aimAt(battle, move, x, y, owner = battle.active) {
   const p = battle.players[owner],
     right = x >= p.x,
-    origin = originFor(p, right ? 0 : 180),
+    origin = originFor(p, right ? 0 : 180, move),
     dx = Math.abs(x - origin.x),
     dy = y - origin.y;
   if (!BALLISTIC.has(move.kind)) {
@@ -24,7 +24,9 @@ export function aimAt(battle, move, x, y, owner = battle.active) {
     const a = (elevation * Math.PI) / 180,
       denominator = 2 * Math.cos(a) ** 2 * (dy + dx * Math.tan(a));
     if (denominator <= 0) continue;
-    const velocity = Math.sqrt((GRAVITY * dx * dx) / denominator),
+    const velocity = Math.sqrt(
+        (GRAVITY * (move.gravityScale || 1) * dx * dx) / denominator,
+      ),
       power = (velocity - 260) / 5.6;
     if (power >= 18 && power <= 103)
       score(right ? elevation : 180 - elevation, clamp(power, 20, 100));

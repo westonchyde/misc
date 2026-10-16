@@ -2,6 +2,31 @@ import { W, H, SEA, traceShot } from "./simulation.js";
 import { roster, maps, BALLISTIC, REMOTE } from "./content.js";
 import { oval, shape, line, ball, creature, trainer } from "./art.js";
 import { drawProjectile, drawMoveImpact, drawBeam } from "./effects.js";
+import { Terrain, originFor, angleVector } from "./simulation.js";
+import {
+  drawHazards,
+  drawWaterStream,
+  drawSignature,
+  drawMaterialImpact,
+  drawConduction,
+  drawFlightTexture,
+  drawCharge,
+} from "./materials-art.js";
+
+const movesByVisual = new Map(
+  roster.flatMap((s) => s.moves.map((m) => [m.visual, m])),
+);
+const materialImpacts = new Set([
+  "flame",
+  "stream",
+  "water",
+  "lava",
+  "ember",
+  "bounce",
+  "seeds",
+  "burrow",
+  "slam",
+]);
 
 function ringAura(c, x, y, r, color, t) {
   c.save();
@@ -102,23 +127,41 @@ export function background(c, map = "highlands", time = 0) {
   c.fillStyle = mist;
   c.fillRect(0, 400, W, 210);
 }
-export function drawMapThumbnail(c, id) {
+export function drawMapThumbnail(c, id, seed = 42, profile, relief = "normal") {
+  const t = new Terrain(seed, id, profile, relief),
+    config = maps.find((m) => m.id === id);
+  c.clearRect(0, 0, c.canvas.width, c.canvas.height);
   c.save();
   c.scale(c.canvas.width / W, c.canvas.height / H);
   background(c, id);
-  const pts = [[0, H]];
-  for (let x = 0; x <= W; x += 20)
-    pts.push([x, 410 + 60 * Math.sin(x / 160 + (id === "sunset" ? 1 : 3))]);
-  pts.push([W, H]);
-  shape(
-    c,
-    pts,
-    id === "sunset" ? "#956958" : id === "islands" ? "#41677a" : "#607d4d",
-    null,
-  );
-  if (id === "islands") {
-    c.fillStyle = "#568fa7";
-    c.fillRect(580, 300, 120, H);
+  for (const [left, right] of t.profile === "islands"
+    ? [
+        [28, 585],
+        [696, W - 28],
+      ]
+    : [[28, W - 28]]) {
+    const edge = [];
+    for (let x = left; x <= right; x += 2) edge.push([x, t.surface(x)]);
+    shape(
+      c,
+      [[left, SEA + 12], ...edge, [right, SEA + 12]],
+      `rgb(${config.soil})`,
+      null,
+    );
+    line(c, edge, `rgb(${config.grass})`, 6);
+  }
+  c.fillStyle = "#548ba5";
+  c.fillRect(0, SEA, W, H - SEA);
+  for (const [i, x] of [260, 1020].entries()) {
+    const y = t.top(x);
+    c.fillStyle = i ? "#9ee3ff" : "#ffbb8a";
+    c.fillRect(x - 7, y - 30, 14, 25);
+    c.fillStyle = "#20344b";
+    c.fillRect(x - 18, y - 49, 36, 17);
+    c.fillStyle = "#fff5de";
+    c.font = "bold 14px system-ui";
+    c.textAlign = "center";
+    c.fillText(String(i + 1), x, y - 36);
   }
   c.restore();
 }
@@ -214,7 +257,7 @@ export class Renderer {
     this.shake = 0;
   }
   event(e) {
-    if (["damage", "combo"].includes(e.type))
+    if (["damage", "combo", "conduction"].includes(e.type))
       this.effects.push({ ...e, life: 1.35, max: 1.35 });
     if (
       ["impact", "splash", "wall", "summon", "arrival", "burst"].includes(
@@ -275,8 +318,15 @@ export class Renderer {
         const i = (y * W + x) * 4,
           exposed = y < 7 || !cells[(y - 7) * W + x],
           edge = y < 2 || !cells[(y - 2) * W + x];
-        const noise = ((x * 73 + y * 137 + ((x * y) % 29)) % 17) - 8;
-        const base = exposed ? config.grass : config.soil;
+        const nx = Math.floor(x / 3),
+          ny = Math.floor(y / 3);
+        const noise = ((nx * 73 + ny * 137 + ((nx * ny) % 29)) % 17) - 8;
+        const base =
+          cells[y * W + x] === 2
+            ? [137, 215, 229]
+            : exposed
+              ? config.grass
+              : config.soil;
         const depth = Math.max(0, y - b.terrain.surface(x));
         const strata =
           !exposed && (Math.sin(y / 27 + Math.sin(x / 110)) > 0.87 ? -16 : 0);
@@ -358,14 +408,93 @@ export class Renderer {
     }
   }
   preview(b, selection) {
-    if (!this.prefs.guide || b.phase !== "aim") return;
+    if (b.phase !== "aim") return;
+    const c0 = this.c,
+      p = b.players[b.active],
+      move = roster[selection.species].moves[selection.move];
+    const o = originFor(p, selection.angle, move),
+      v = angleVector(selection.angle),
+      len = 40 + selection.power * 0.38;
+    c0.save();
+    if (this.prefs.history !== false && b.lastShots[b.active]) {
+      const last = b.lastShots[b.active],
+        pts = last.trace;
+      c0.globalAlpha = 0.34;
+      c0.setLineDash([3, 7]);
+      line(
+        c0,
+        pts.map((p) => [p.x, p.y]),
+        "#f0dfac",
+        1.5,
+      );
+      c0.setLineDash([]);
+      const end = pts.at(-1);
+      c0.fillStyle = "#fff0b5";
+      c0.font = "9px system-ui";
+      c0.textAlign = "center";
+      c0.fillText(
+        `LAST ${Math.round(last.angle <= 90 ? last.angle : 180 - last.angle)}° / ${Math.round(last.power)}%`,
+        Math.max(100, Math.min(W - 100, end.x)),
+        Math.max(25, Math.min(SEA - 18, end.y - 16)),
+      );
+    }
+    c0.globalAlpha = 1;
+    line(
+      c0,
+      [
+        [o.x - v.x * 8, o.y - v.y * 8],
+        [o.x + v.x * len, o.y + v.y * len],
+      ],
+      "#183044",
+      7,
+    );
+    line(
+      c0,
+      [
+        [o.x - v.x * 8, o.y - v.y * 8],
+        [o.x + v.x * len, o.y + v.y * len],
+      ],
+      "#fff3b0",
+      3,
+    );
+    const ex = o.x + v.x * len,
+      ey = o.y + v.y * len;
+    shape(
+      c0,
+      [
+        [ex, ey],
+        [ex - v.x * 13 - v.y * 6, ey - v.y * 13 + v.x * 6],
+        [ex - v.x * 13 + v.y * 6, ey - v.y * 13 - v.x * 6],
+      ],
+      "#fff3b0",
+      "#183044",
+      1,
+    );
+    const lx = Math.max(60, Math.min(W - 60, o.x + v.x * 45)),
+      ly = Math.max(24, o.y - 35);
+    c0.fillStyle = "#172c40e6";
+    c0.fillRect(lx - 45, ly - 11, 90, 17);
+    c0.fillStyle = "#fff4c4";
+    c0.font = "bold 10px system-ui";
+    c0.textAlign = "center";
+    c0.fillText(
+      `${Math.round(selection.facing === 1 ? selection.angle : 180 - selection.angle)}° · ${move.kind === "beam" ? "BEAM" : Math.round(selection.power) + "%"}`,
+      lx,
+      ly + 1,
+    );
+    c0.restore();
+    if (!this.prefs.guide) return;
     const c = this.c,
       m = roster[selection.species].moves[selection.move],
       trace = traceShot(b, m, selection.angle, selection.power);
     c.save();
     c.globalAlpha = 0.8;
     if (BALLISTIC.has(m.kind)) {
-      for (let i = 1; i < trace.points.length; i += 2) {
+      const guideLength =
+        this.prefs.guideLength === "short"
+          ? Math.min(10, trace.points.length)
+          : trace.points.length;
+      for (let i = 1; i < guideLength; i += 2) {
         const p = trace.points[i];
         oval(
           c,
@@ -404,6 +533,10 @@ export class Renderer {
         1.6,
       );
       c.setLineDash([]);
+    }
+    if (this.prefs.guideLength === "short") {
+      c.restore();
+      return;
     }
     const x = clamp(trace.x, 8, W - 8),
       y = clamp(trace.y, 18, SEA - 3),
@@ -526,7 +659,7 @@ export class Renderer {
           "#fff5dd88",
         );
       }
-      x -= dir * 35;
+      x -= dir * (m.behavior === "flame" ? 70 : 35);
       if (m.id === "body-slam") {
         x = s.x;
         y -= Math.max(0, 1 - q / 0.58) * 150;
@@ -544,7 +677,14 @@ export class Renderer {
         y -= Math.sin(q * Math.PI) * 25;
       if (m.id === "dig") {
         scale *= 0.85;
-        y += q > 0.6 ? (q - 0.6) * 90 : 0;
+        if (q > 0.22 && q < 0.56) {
+          scale *= 0.35;
+          x = b.attack.burrowX || x;
+          y += 65;
+        } else if (q >= 0.56) {
+          x = s.x;
+          y -= Math.sin(Math.min(1, (q - 0.56) / 0.3) * Math.PI) * 45;
+        }
       }
       if (q > 0.2 && q < 0.58) {
         c.save();
@@ -628,7 +768,12 @@ export class Renderer {
       if (REMOTE.has(m.kind)) {
         ball(c, p.x, p.y, 1.05, p.age * 8);
         ringAura(c, p.x, p.y, 12, m.color, p.age);
-      } else drawProjectile(c, m, p.x, p.y, p.age, Math.atan2(p.vy, p.vx));
+      } else {
+        if (m.behavior === "stream") drawWaterStream(c, p, b.clock);
+        const shown = p.move || m;
+        drawFlightTexture(c, shown, p, b.clock);
+        drawProjectile(c, shown, p.x, p.y, p.age, Math.atan2(p.vy, p.vx));
+      }
     }
     for (const p of this.trail) {
       c.globalAlpha = p.life * 1.3;
@@ -655,16 +800,14 @@ export class Renderer {
             H,
           );
     if (this.canvas.height !== desired) this.canvas.height = desired;
-    let top = Math.min(
-      ...b.players.filter((p) => p.hp > 0).map((p) => p.y - 160),
-      350,
+    const highest = Math.min(...b.terrain.heights);
+    const top = Math.max(
+      0,
+      Math.min(
+        highest - 145,
+        ...b.players.filter((p) => p.hp > 0).map((p) => p.y - 155),
+      ),
     );
-    if (human && b.phase === "aim" && this.prefs.guide) {
-      const m = roster[selection.species].moves[selection.move];
-      const trace = traceShot(b, m, selection.angle, selection.power);
-      top = Math.min(top, ...trace.points.map((p) => p.y - 25));
-    }
-    top = Math.max(0, top);
     const zoom = clamp((desired - 20) / (SEA + 35 - top), 0.55, 1);
     const target = {
       x: (W - W * zoom) / 2,
@@ -726,12 +869,13 @@ export class Renderer {
     c.drawImage(this.land, 0, 0);
     // Water is drawn over the terrain at the shoreline and is always a visible hazard.
     this.water(b.clock, this.map);
+    drawHazards(c, b, this.prefs.reduced);
     if (human) this.preview(b, selection);
     for (let i = 0; i < 2; i++) {
       const p = b.players[i];
       if (p.hp <= 0) continue;
       trainer(c, p, i, b.clock, b.phase, b.phaseTime, i === b.active);
-      const labelY = p.y - 65;
+      const labelY = p.y - 72;
       c.font = "bold 10px system-ui";
       c.textAlign = "center";
       c.fillStyle = "#163144bb";
@@ -767,7 +911,9 @@ export class Renderer {
       }
     }
     this.summon(b);
+    drawCharge(c, b);
     this.beam(b);
+    drawSignature(c, b, this.prefs.reduced);
     this.projectile(b);
     for (const p of this.particles) {
       c.globalAlpha = clamp(p.life / 0.5, 0, 1);
@@ -779,7 +925,8 @@ export class Renderer {
       const q = 1 - e.life / e.max;
       c.save();
       c.globalAlpha = Math.min(1, e.life * 3);
-      if (e.type === "damage" || e.type === "combo") {
+      if (e.type === "conduction") drawConduction(c, e, q);
+      else if (e.type === "damage" || e.type === "combo") {
         c.font =
           e.type === "combo" ? "bold 12px system-ui" : "900 26px system-ui";
         c.textAlign = "center";
@@ -790,7 +937,21 @@ export class Renderer {
         c.fillStyle = e.type === "combo" ? "#fff4a8" : "#fff5d6";
         c.fillText(text, e.x, e.y - 25 - q * 35);
       } else if (e.visual) {
-        if (e.fragment) {
+        const m = movesByVisual.get(e.visual);
+        if (
+          e.fragment &&
+          m &&
+          ["seeds", "lava", "meteors"].includes(m.behavior)
+        ) {
+          drawMaterialImpact(
+            c,
+            m.behavior === "meteors" ? { ...m, behavior: "bounce" } : m,
+            e.x,
+            e.y,
+            e.radius,
+            q,
+          );
+        } else if (e.fragment) {
           drawProjectile(
             c,
             { id: e.kind, visual: e.visual, color: e.color },
@@ -799,8 +960,20 @@ export class Renderer {
             q * 2,
           );
           ringAura(c, e.x, e.y, e.radius * q, e.color, q);
-        } else
-          drawMoveImpact(c, e.visual, e.x, e.y, e.radius, q, 1, e.facing || 1);
+        } else {
+          if (!materialImpacts.has(m?.behavior))
+            drawMoveImpact(
+              c,
+              e.visual,
+              e.x,
+              e.y,
+              e.radius,
+              q,
+              1,
+              e.facing || 1,
+            );
+          if (m) drawMaterialImpact(c, m, e.x, e.y, e.radius, q);
+        }
       } else {
         const r = (e.radius || 35) * (0.4 + q * 1.1);
         oval(

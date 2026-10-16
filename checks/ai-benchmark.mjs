@@ -2,6 +2,7 @@ import { Battle } from "../src/simulation.js";
 import { planShot, movementPlan } from "../src/ai.js";
 import { randomTeams } from "../src/draft.js";
 import assert from "node:assert/strict";
+import { landscapes } from "../src/landscapes.js";
 const result = { ace: 0, rookie: 0, draws: 0, unfinished: 0, turns: [] };
 for (let game = 0; game < 20; game++) {
   const ace = game % 2,
@@ -10,6 +11,10 @@ for (let game = 0; game < 20; game++) {
       mode: "hotseat",
       map: ["highlands", "sunset", "islands"][game % 3],
       seed: game + 31,
+      landscape: landscapes[game % landscapes.length].id,
+      relief: game % 2 ? "dramatic" : "normal",
+      hp: 240,
+      first: (game >> 1) % 2,
       teams: randomTeams(game + 51),
     });
   let turns = 0;

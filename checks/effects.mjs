@@ -21,8 +21,9 @@ try {
   const result = await page.evaluate(async () => {
     const { roster } = await import("/src/content.js"),
       { drawMoveImpact, drawProjectile } = await import("/src/effects.js"),
-      { spriteCache, drawSprite, loadSprites } =
-        await import("/src/sprites.js");
+      { spriteCache, drawSprite, loadSprites } = await import(
+        "/src/sprites.js"
+      );
     if (!spriteCache.size) await loadSprites();
     const hash = (data) => {
       let h = 2166136261;

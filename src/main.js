@@ -8,27 +8,46 @@ import { AudioFX } from "./audio.js";
 import { aimAt } from "./targeting.js";
 import { Draft, TEAM_SIZE } from "./draft.js";
 import { loadSprites, spriteStatus, spriteURL } from "./sprites.js";
+import { landscapes } from "./landscapes.js";
+import {
+  cleanProfile,
+  palettes,
+  skins,
+  hairstyles,
+  trainerPortrait,
+} from "./trainers.js";
 
 const $ = (s) => document.querySelector(s),
   $$ = (s) => [...document.querySelectorAll(s)];
 const defaults = {
-  version: 1,
+  version: 2,
   sound: false,
   volume: 0.35,
   reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
   guide: true,
-  targeting: true,
+  guideLength: "short",
+  targeting: false,
+  history: true,
+  landscape: "rolling",
+  relief: "normal",
+  hp: 240,
+  profiles: [cleanProfile({}, 0), cleanProfile({}, 1)],
   map: "highlands",
   difficulty: "normal",
 };
 let saved = {};
 try {
   const value = JSON.parse(localStorage.getItem("battlefront.settings"));
-  if (value?.version === 1) saved = value;
+  if ([1, 2].includes(value?.version)) saved = value;
 } catch {
   /* Storage may be disabled. */
 }
-const prefs = { ...defaults, ...saved };
+const prefs = { ...defaults, ...saved, version: 2 };
+if (saved.version === 1) prefs.guideLength = "full";
+prefs.profiles = [0, 1].map((i) => cleanProfile(prefs.profiles?.[i], i));
+if (!landscapes.some((p) => p.id === prefs.landscape))
+  prefs.landscape = "rolling";
+if (!difficultyProfiles[prefs.difficulty]) prefs.difficulty = "normal";
 if (!maps.some((m) => m.id === prefs.map)) prefs.map = "highlands";
 prefs.volume = Number.isFinite(Number(prefs.volume))
   ? Math.max(0, Math.min(1, Number(prefs.volume)))
@@ -120,6 +139,9 @@ function start(options) {
   closeDialogs();
   matchOptions = options;
   battle = new Battle(options);
+  roundRecorded = false;
+  $("#tutorial-card").hidden = !tutorial;
+  $("#shot-summary").textContent = "";
   playing = true;
   selections = freshSelections();
   ai = null;
@@ -133,7 +155,7 @@ function start(options) {
   $("#pause").hidden = false;
   $("#map-name").textContent = maps.find((m) => m.id === options.map).name;
   $("#map-tag").textContent =
-    `${maps.find((m) => m.id === options.map).tag} / SEED ${options.seed}`;
+    `${landscapes.find((l) => l.id === battle.terrain.profile)?.name.toUpperCase()} / SEED ${options.seed}`;
   $("#stage-tag").textContent = maps
     .find((m) => m.id === options.map)
     .name.toUpperCase();
@@ -153,6 +175,8 @@ function home() {
   clearTimeout(draftTimer);
   closeDialogs();
   $("#draft-screen").hidden = true;
+  tutorial = null;
+  demo = null;
   playing = false;
   document.body.classList.remove("in-battle");
   $("#home").hidden = false;
@@ -170,7 +194,13 @@ function buildMaps() {
     const el = document.createElement("canvas");
     el.width = 180;
     el.height = 85;
-    drawMapThumbnail(el.getContext("2d"), m.id);
+    drawMapThumbnail(
+      el.getContext("2d"),
+      m.id,
+      Number($("#seed").value) || 42,
+      prefs.landscape,
+      prefs.relief,
+    );
     button.append(
       el,
       document.createTextNode(
@@ -189,9 +219,18 @@ function buildMaps() {
     };
     $("#map-picker").append(button);
   });
-  $("#map-description").textContent = maps.find(
-    (m) => m.id === mapId,
-  ).description;
+  $("#map-description").textContent =
+    maps.find((m) => m.id === mapId).name + " · scenery";
+  drawMapThumbnail(
+    $("#terrain-preview").getContext("2d"),
+    mapId,
+    Number($("#seed").value) || 42,
+    prefs.landscape,
+    prefs.relief,
+  );
+  $("#landscape-hint").textContent = landscapes.find(
+    (l) => l.id === prefs.landscape,
+  ).hint;
 }
 function buildRoster() {
   if (!battle) return;
@@ -224,6 +263,17 @@ function buildMoves() {
   });
 }
 let signatures = ["", ""];
+let series = null,
+  roundRecorded = false,
+  tutorial = null,
+  inspected = 0,
+  inspectMove = 0,
+  demo = null;
+const demoRenderer = new Renderer($("#inspect-preview"), {
+  reduced: true,
+  guide: false,
+  history: false,
+});
 function updateHUD() {
   if (!battle || !playing) return;
   const s = current(),
@@ -245,7 +295,7 @@ function updateHUD() {
           : i === 1 && battle.options.mode === "practice"
             ? "PRACTICE TARGET"
             : `PLAYER ${i + 1}`;
-      el.innerHTML = `<div class="name-row"><span class="player-name">${i ? "◆" : "●"} ${player.name}</span><span class="hp-value">${player.hp} <small>/ ${RULES.hp} HP</small></span></div><div class="health-track" role="meter" aria-label="${player.name} health" aria-valuemin="0" aria-valuemax="${RULES.hp}" aria-valuenow="${player.hp}"><i style="width:${(player.hp / RULES.hp) * 100}%"></i></div><div class="status-row"><span>${opponent}</span>${player.wet ? `<span class="status-pill">WET ${player.wet}</span>` : ""}${player.burn ? `<span class="status-pill">BURN ${player.burn}</span>` : ""}${player.curse ? '<span class="status-pill">CURSED</span>' : ""}${player.poison ? `<span class="status-pill">POISON ${player.poison}</span>` : ""}${player.chill ? '<span class="status-pill">CHILLED</span>' : ""}${player.weaken ? '<span class="status-pill">WEAKENED</span>' : ""}</div>`;
+      el.innerHTML = `<div class="name-row"><span class="player-name">${i ? "◆" : "●"} ${player.name}</span><span class="hp-value">${player.hp} <small>/ ${battle.maxHP} HP</small></span></div><div class="health-track" role="meter" aria-label="${player.name} health" aria-valuemin="0" aria-valuemax="${battle.maxHP}" aria-valuenow="${player.hp}"><i style="width:${(player.hp / battle.maxHP) * 100}%"></i></div><div class="status-row"><span>${opponent}</span>${player.wet ? `<span class="status-pill">WET ${player.wet}</span>` : ""}${player.burn ? `<span class="status-pill">BURN ${player.burn}</span>` : ""}${player.curse ? '<span class="status-pill">CURSED</span>' : ""}${player.poison ? `<span class="status-pill">POISON ${player.poison}</span>` : ""}${player.chill ? '<span class="status-pill">CHILLED</span>' : ""}${player.weaken ? '<span class="status-pill">WEAKENED</span>' : ""}</div>`;
     }
   });
   $("#turn-label").textContent = `TURN ${String(battle.turn).padStart(2, "0")}`;
@@ -260,7 +310,7 @@ function updateHUD() {
   $("#timer").classList.toggle("urgent", battle.timer < 10);
   const phaseText = {
     aim: !human()
-      ? "River is reading the terrain…"
+      ? `${p.name} is reading the terrain…`
       : "Choose your partner. Make your mark.",
     summon: `${p.name}: “${battle.summon?.species.name}, I choose you!”`,
     flight: `${battle.currentMove?.name} — watch the landing!`,
@@ -277,7 +327,7 @@ function updateHUD() {
       : battle.phase === "summon"
         ? `${battle.summon.species.name.toUpperCase()} / ${battle.currentMove.name.toUpperCase()}`
         : !human() && battle.phase === "aim"
-          ? "RIVER IS PLANNING A SHOT"
+          ? `${p.name} IS PLANNING A SHOT`
           : "";
   $("#movement").textContent =
     `↔ ${Math.round(battle.budget)} / ${RULES.movement} movement`;
@@ -331,6 +381,14 @@ function updateHUD() {
     $(id).disabled = !canInput() || battle.budget <= 0;
   });
   $("#guide-toggle").setAttribute("aria-pressed", String(prefs.guide));
+  $("#guide-toggle").textContent = prefs.guide
+    ? `◎ ${prefs.guideLength === "short" ? "Short arc" : "Full guide"}`
+    : "◎ Direction only";
+  const last = battle.lastShots[battle.active];
+  $("#shot-summary").textContent = last
+    ? `Previous shot · ${roster[last.species].moves[last.move].name} · ${Math.round(last.angle <= 90 ? last.angle : 180 - last.angle)}° / ${Math.round(last.power)}%${prefs.targeting ? " · Assisted aiming" : " · Classic aiming"}`
+    : `${prefs.targeting ? "ASSISTED · click a landing area to solve an arc" : "CLASSIC · adjust angle and power; the arrow stays visible"} · ${battle.players[battle.opening].name} opened${series ? ` · Round ${series.round}` : ""}`;
+  updateLesson();
 }
 function tickAI() {
   if (!playing || modalOpen() || human() || battle.phase !== "aim") {
@@ -352,7 +410,9 @@ function tickAI() {
       ai.walking = movement.steps;
       ai.direction = movement.direction;
       ai.moved = true;
-      battle.addLog(`RIVER moves to ${movement.reason}.`);
+      battle.addLog(
+        `${battle.players[battle.active].name} moves to ${movement.reason}.`,
+      );
     }
     const s = current();
     s.species = ai.plan.species;
@@ -390,6 +450,20 @@ function handleEvents() {
       pointerMove = 0;
     }
     if (event.type === "victory") {
+      if (!roundRecorded && series && battle.winner >= 0) {
+        series.wins[battle.winner]++;
+        roundRecorded = true;
+      }
+      const complete = series && Math.max(...series.wins) >= series.target;
+      $("#series-score").textContent =
+        series && series.target > 1
+          ? `${battle.players[0].name} ${series.wins[0]} — ${series.wins[1]} ${battle.players[1].name}${complete ? " · SERIES COMPLETE" : " · FIRST TO TWO"}`
+          : "";
+      $("#rematch").textContent = complete
+        ? "New series →"
+        : series?.target > 1
+          ? "Next round →"
+          : "Rematch →";
       $("#winner").textContent =
         battle.winner === -1
           ? "A perfect draw."
@@ -415,6 +489,8 @@ function showSettings() {
   $("#motion-option").checked = prefs.reduced;
   $("#guide-option").checked = prefs.guide;
   $("#targeting-option").checked = prefs.targeting;
+  $("#guide-length").value = prefs.guideLength;
+  $("#history-option").checked = prefs.history !== false;
   openDialog("settings-dialog");
 }
 let draft = null,
@@ -425,7 +501,31 @@ function showDraft() {
   playing = false;
   clearTimeout(draftTimer);
   signatures = ["", ""];
+  tutorial = null;
+  demo = null;
+  inspected = 0;
+  inspectMove = 0;
+  prefs.hp = +$("#match-hp").value;
+  savePrefs();
+  const seed = Math.max(
+    1,
+    Math.min(999999, Math.floor(Number($("#seed").value) || 42)),
+  );
+  const first =
+    $("#first-player").value === "random"
+      ? (Math.imul(seed, 2654435761) >>> 4) % 2
+      : +$("#first-player").value;
+  series = {
+    wins: [0, 0],
+    target: $("#series-option").checked ? 2 : 1,
+    round: 1,
+  };
   draftOptions = {
+    landscape: prefs.landscape,
+    relief: prefs.relief,
+    profiles: prefs.profiles.map((p) => ({ ...p })),
+    hp: prefs.hp,
+    first,
     mode: $("input[name=mode]:checked").value,
     map: mapId,
     seed: Math.max(
@@ -439,6 +539,7 @@ function showDraft() {
     draftOptions.seed,
     draftOptions.mode,
     draftOptions.difficulty,
+    { landscape: draftOptions.landscape },
   );
   if ($("input[name=team-mode]:checked").value === "random") draft.randomize();
   $("#home").hidden = true;
@@ -446,7 +547,21 @@ function showDraft() {
   $("#draft-screen").hidden = false;
   $("#pause").hidden = true;
   document.body.classList.remove("in-battle");
+  drawMapThumbnail(
+    $("#draft-map-preview").getContext("2d"),
+    mapId,
+    seed,
+    prefs.landscape,
+    prefs.relief,
+  );
+  $("#draft-map-name").textContent =
+    landscapes.find((l) => l.id === prefs.landscape).name +
+    " · " +
+    maps.find((m) => m.id === mapId).name;
+  $("#draft-map-info").textContent =
+    `${landscapes.find((l) => l.id === prefs.landscape).hint} Seed ${seed} · ${prefs.hp} HP · ${prefs.profiles[first].name} opens.`;
   renderDraft();
+  inspectSpecies(inspected);
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 function renderDraft() {
@@ -454,11 +569,15 @@ function renderDraft() {
   const cpu = !draft.complete && draft.mode !== "hotseat" && draft.active === 1;
   $("#draft-turn").textContent = draft.complete
     ? "TEAMS READY · SIX PARTNERS EACH"
-    : `${draft.active === 0 ? "EMBER" : "RIVER"} PICKS${cpu ? " · CPU IS THINKING…" : ""} · PICK ${draft.picks.length + 1} / 12`;
+    : `${draftOptions.profiles[draft.active].name.toUpperCase()} PICKS${cpu ? " · CPU IS THINKING…" : ""} · PICK ${draft.picks.length + 1} / 12`;
+  $("#draft-order").textContent =
+    `A shared snake draft: ${draftOptions.profiles[0].name}, ${draftOptions.profiles[1].name}, ${draftOptions.profiles[1].name}, ${draftOptions.profiles[0].name}. Inspect first, then confirm a pick.`;
   $("#draft-last").textContent = draft.picks.length
     ? `Last pick: ${roster[draft.picks.at(-1)].name}`
     : "Choose coverage, combos and a few heavy hitters.";
   for (let owner = 0; owner < 2; owner++) {
+    $(`#draft-name-${owner}`).textContent =
+      `${owner ? "◆" : "●"} ${draftOptions.profiles[owner].name.toUpperCase()}`;
     $(`#draft-count-${owner}`).textContent =
       `${draft.teams[owner].length} / ${TEAM_SIZE}`;
     $(`#draft-team-${owner}`).innerHTML = Array.from(
@@ -471,31 +590,42 @@ function renderDraft() {
           : `<div class="draft-slot"><b>${i + 1}</b><span>YOUR PICK</span></div>`;
       },
     ).join("");
+    const types = new Set(
+      draft.teams[owner].flatMap((s) => roster[s].moves.map((m) => m.family)),
+    );
+    let coverage = $(`#draft-team-${owner}`).parentElement.querySelector(
+      ".team-coverage",
+    );
+    if (!coverage) {
+      coverage = document.createElement("p");
+      coverage.className = "team-coverage";
+      $(`#draft-team-${owner}`).after(coverage);
+    }
+    coverage.textContent = types.size
+      ? `Coverage · ${[...types].slice(0, 5).join(" / ")}`
+      : "Inspect a Pokémon to see how its moves work.";
   }
   $("#draft-pool").innerHTML = "";
   for (const index of draft.pool) {
     const s = roster[index],
       picked = draft.picks.includes(index),
       button = document.createElement("button");
-    button.className = "draft-card";
+    button.className = `draft-card ${index === inspected ? "inspecting" : ""}`;
     button.style.setProperty("--partner", s.color);
     button.dataset.species = index;
-    button.disabled = cpu || picked || draft.complete;
-    button.setAttribute("aria-label", `Draft ${s.name}`);
-    button.innerHTML = `<span class="draft-type">${s.element}</span><img src="${spriteURL(s.id)}" alt="" draggable="false"><strong>${s.name}</strong><small>${s.role}</small><span class="draft-moves">${s.moves.map((m) => m.name).join(" / ")}</span>${picked ? `<span class="picked-label">${draft.teams[0].includes(index) ? "EMBER" : "RIVER"} PICK</span>` : ""}`;
+    button.disabled = cpu;
+    button.setAttribute("aria-label", `Inspect ${s.name}`);
+    button.innerHTML = `<span class="draft-type">${s.element}</span><img src="${spriteURL(s.id)}" alt="" draggable="false"><strong>${s.name}</strong><small>${s.role}</small><span class="draft-moves">${s.moves.map((m) => m.name).join(" / ")}</span>${picked ? `<span class="picked-label">${draftOptions.profiles[draft.teams[0].includes(index) ? 0 : 1].name.toUpperCase()} PICK</span>` : ""}`;
     button.onclick = () => {
-      if (draft.pick(index)) {
-        audio.unlock();
-        audio.tone(470, 640, 0.12);
-        renderDraft();
-      }
+      inspectSpecies(index);
     };
     $("#draft-pool").append(button);
   }
   $("#draft-begin").disabled = !draft.complete;
   $("#draft-help").textContent = draft.complete
     ? "Your drafted moves have limited shots. Make them count."
-    : "Snake order: Ember → River → River → Ember. Both moves come with each pick.";
+    : `Snake order: ${draftOptions.profiles[0].name} → ${draftOptions.profiles[1].name} → ${draftOptions.profiles[1].name} → ${draftOptions.profiles[0].name}. Both moves come with each pick.`;
+  updateInspector();
   if (draft.complete) $("#draft-begin").focus({ preventScroll: true });
   else if (!cpu)
     $("#draft-pool button:not(:disabled)")?.focus({ preventScroll: true });
@@ -514,7 +644,7 @@ $("#draft-begin").onclick = () => {
 };
 $("#draft-back").onclick = home;
 $("#draft-reset").onclick = () => {
-  draft = new Draft(draft.seed, draft.mode, draft.difficulty);
+  draft = new Draft(draft.seed, draft.mode, draft.difficulty, draft.context);
   renderDraft();
 };
 $("#draft-random").onclick = () => {
@@ -560,10 +690,19 @@ $("#restart").onclick = $("#rematch").onclick = () => {
   signatures = ["", ""];
   start(matchOptions);
 };
+$("#rematch").onclick = () => nextRound(false);
+$("#new-seed").onclick = () => nextRound(true);
+$("#redraft").onclick = () => {
+  closeDialogs();
+  playing = false;
+  $("#seed").value = matchOptions.seed;
+  showDraft();
+};
 $("#return-menu").onclick = $("#result-menu").onclick = home;
 $("#result").addEventListener("cancel", (e) => e.preventDefault());
 $("#sound-option").onchange = (e) => {
   prefs.sound = e.target.checked;
+  $("#setup-sound").checked = prefs.sound;
   savePrefs();
   audio.unlock();
   audio.tone(440, 660, 0.2);
@@ -583,10 +722,15 @@ $("#guide-option").onchange = (e) => {
 };
 $("#targeting-option").onchange = (e) => {
   prefs.targeting = e.target.checked;
+  $("#aim-style").value = prefs.targeting ? "assisted" : "classic";
   savePrefs();
 };
 $("#guide-toggle").onclick = () => {
-  prefs.guide = !prefs.guide;
+  if (!prefs.guide) {
+    prefs.guide = true;
+    prefs.guideLength = "short";
+  } else if (prefs.guideLength === "short") prefs.guideLength = "full";
+  else prefs.guide = false;
   savePrefs();
   updateHUD();
 };
@@ -774,6 +918,28 @@ function frame(now) {
       hudTick = 0;
       hudPhase = battle.phase;
     }
+  } else if (!$("#draft-screen").hidden && demo) {
+    const n = Math.min(6, Math.ceil(elapsed / DT));
+    for (let i = 0; i < n; i++) {
+      demo.step();
+      for (const event of demo.events.splice(0)) demoRenderer.event(event);
+      demoRenderer.tick(DT);
+    }
+    demoRenderer.draw(
+      demo,
+      {
+        species: inspected,
+        move: inspectMove,
+        angle: 45,
+        power: 55,
+        facing: 1,
+      },
+      false,
+    );
+    if (demo.phase === "over" || demo.turn > 1) {
+      demo.wait = (demo.wait || 0) + elapsed;
+      if (demo.wait > 1.2) resetDemo();
+    }
   } else if (!$("#home").hidden) {
     heroTick += elapsed;
     if (heroTick > 1 / 15) {
@@ -783,6 +949,222 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+function nextRound(newSeed = false) {
+  if (!series || Math.max(...series.wins) >= series.target)
+    series = {
+      wins: [0, 0],
+      round: 1,
+      target: $("#series-option").checked ? 2 : 1,
+    };
+  else series.round++;
+  const options = {
+    ...matchOptions,
+    first: 1 - battle.opening,
+    seed: newSeed ? matchOptions.seed + 1 : matchOptions.seed,
+  };
+  start(options);
+}
+function buildTrainers() {
+  $("#trainer-customization").innerHTML = "";
+  prefs.profiles.forEach((p, i) => {
+    const editor = document.createElement("div");
+    editor.className = "trainer-editor";
+    editor.innerHTML = `<canvas width="110" height="140" aria-label="Player ${i + 1} trainer preview"></canvas><label>Player ${i + 1} name<input data-profile="name" maxlength="12" value="${p.name}"></label><label>Look<select data-profile="style">${hairstyles.map((name, j) => `<option value="${j}" ${p.style === j ? "selected" : ""}>${name}</option>`).join("")}</select></label><label>Skin<select data-profile="skin">${skins.map((_, j) => `<option value="${j}" ${p.skin === j ? "selected" : ""}>Tone ${j + 1}</option>`).join("")}</select></label><div class="swatches">${palettes.map((col, j) => `<button type="button" class="swatch" style="background:${col.main}" aria-label="Player ${i + 1} ${col.name} outfit" aria-pressed="${p.palette === j}" data-palette="${j}"></button>`).join("")}</div>`;
+    for (const input of editor.querySelectorAll("[data-profile]"))
+      input.addEventListener("change", () => {
+        p[input.dataset.profile] =
+          input.dataset.profile === "name" ? input.value : +input.value;
+        prefs.profiles[i] = cleanProfile(p, i);
+        savePrefs();
+        buildTrainers();
+      });
+    for (const button of editor.querySelectorAll("[data-palette]"))
+      button.onclick = () => {
+        p.palette = +button.dataset.palette;
+        savePrefs();
+        buildTrainers();
+      };
+    $("#trainer-customization").append(editor);
+    trainerPortrait(editor.querySelector("canvas"), p, i);
+  });
+}
+function inspectSpecies(index) {
+  inspected = index;
+  inspectMove = 0;
+  updateInspector();
+  resetDemo();
+  for (const button of $("#draft-pool").children)
+    button.classList.toggle("inspecting", +button.dataset.species === index);
+}
+function updateInspector() {
+  if (!draft) return;
+  const species = roster[inspected],
+    m = species.moves[inspectMove];
+  $("#inspect-name").textContent = species.name;
+  $("#inspect-role").textContent = species.role;
+  $("#inspect-move-tabs").innerHTML = species.moves
+    .map(
+      (move, i) =>
+        `<button data-demo-move="${i}" class="${i === inspectMove ? "selected" : ""}" aria-pressed="${i === inspectMove}">${move.name}</button>`,
+    )
+    .join("");
+  for (const button of $("#inspect-move-tabs").children)
+    button.onclick = () => {
+      inspectMove = +button.dataset.demoMove;
+      updateInspector();
+      resetDemo();
+    };
+  $("#inspect-details").innerHTML =
+    `<p class="move-facts">${m.family.toUpperCase()} · ${m.damage}${m.count ? " × " + m.count : ""} BASE · ${m.ammo} USES</p><p>${m.description}</p><p><strong>Ground:</strong> ${m.terrain}</p><p class="muted">${m.counter}${m.cooldown ? " Recharge: " + m.cooldown + " owner turn" + (m.cooldown === 1 ? "" : "s") + "." : ""}</p>`;
+  const cpu = draft.mode !== "hotseat" && draft.active === 1,
+    picked = draft.picks.includes(inspected);
+  $("#draft-confirm").disabled = draft.complete || cpu || picked;
+  $("#draft-confirm").textContent = picked
+    ? "Already drafted"
+    : `Draft ${species.name} →`;
+  $("#inspect-reason").textContent = draft.complete
+    ? "Both teams are ready. You can still inspect every move."
+    : picked
+      ? "This partner belongs to a team. Inspect another choice."
+      : cpu
+        ? "The computer is making its pick."
+        : `${draftOptions.profiles[draft.active].name}'s choice. Inspection does not use your pick.`;
+}
+function resetDemo() {
+  if (!draftOptions || !spriteStatus.ready) return;
+  demo = new Battle({
+    seed: 42,
+    map: draftOptions.map,
+    landscape: "rolling",
+    timer: false,
+    mode: "practice",
+    teams: [[inspected], [1]],
+    hp: 300,
+    profiles: draftOptions.profiles,
+  });
+  for (let i = 0; i < 30; i++) demo.step();
+  demo.wind = 0;
+  const target = demo.players[1],
+    aim = aimAt(demo, roster[inspected].moves[inspectMove], target.x, target.y);
+  demo.commit(inspected, inspectMove, aim.angle, aim.power);
+  demoRenderer.clear();
+}
+$("#draft-confirm").onclick = () => {
+  if (draft.pick(inspected)) {
+    audio.unlock();
+    audio.tone(470, 640, 0.12);
+    renderDraft();
+  }
+};
+$("#landscape").innerHTML = landscapes
+  .map((l) => `<option value="${l.id}">${l.name}</option>`)
+  .join("");
+$("#landscape").value = prefs.landscape;
+$("#relief").value = prefs.relief;
+for (const id of ["landscape", "relief"])
+  $("#" + id).onchange = (e) => {
+    prefs[id] = e.target.value;
+    savePrefs();
+    buildMaps();
+  };
+$("#seed").oninput = buildMaps;
+$("#reroll-map").onclick = () => {
+  $("#seed").value = 1 + Math.floor(Math.random() * 999998);
+  buildMaps();
+};
+$("#match-hp").value = [180, 240, 300].includes(prefs.hp) ? prefs.hp : 240;
+$("#aim-style").value = prefs.targeting ? "assisted" : "classic";
+$("#aim-style").onchange = (e) => {
+  prefs.targeting = e.target.value === "assisted";
+  prefs.guide = true;
+  prefs.guideLength = prefs.targeting ? "full" : "short";
+  savePrefs();
+};
+$("#guide-length").onchange = (e) => {
+  prefs.guideLength = e.target.value;
+  savePrefs();
+};
+$("#history-option").onchange = (e) => {
+  prefs.history = e.target.checked;
+  savePrefs();
+};
+$("#setup-sound").checked = prefs.sound;
+$("#setup-sound").onchange = (e) => {
+  prefs.sound = e.target.checked;
+  savePrefs();
+  audio.unlock();
+  audio.tone(420, 640, 0.15);
+};
+const lessons = [
+  {
+    title: "Find your angle",
+    body: "Move the elevation slider. The gold direction arrow stays visible even without a full trajectory. A higher angle gives a taller arc.",
+    check: () => Math.abs(current().angle - 45) > 8,
+  },
+  {
+    title: "Set the power",
+    body: "Change power by at least 10%. Power changes range. The short dots are the beginning of the arc; they do not reveal the landing.",
+    check: () => Math.abs(current().power - 55) >= 10,
+  },
+  {
+    title: "Throw a shot",
+    body: "Use Flamethrower and press Summon & attack (or Space). Watch Charizard appear, launch and recall. A miss is useful information.",
+    check: () => battle.turn >= 2 && battle.phase === "aim",
+  },
+  {
+    title: "Correct your shot",
+    body: "Your previous path and settings remain on the field. Adjust angle or power to correct it. The guide button cycles short arc, full guide and direction only.",
+    check: () => battle.turn >= 3 && battle.phase === "aim",
+  },
+  {
+    title: "Change the battlefield",
+    body: "Try Blastoise’s Hydro Pump, then Pikachu’s Thunderbolt. Water pushes and leaves wet ground; lightning conducts through connected wet patches. Practice freely or return to setup.",
+    check: () => true,
+  },
+];
+function updateLesson() {
+  if (!tutorial) return;
+  const lesson = lessons[tutorial.step];
+  $("#lesson-count").textContent =
+    `FIELD SCHOOL · ${tutorial.step + 1} / ${lessons.length}`;
+  $("#lesson-title").textContent = lesson.title;
+  $("#lesson-body").textContent = lesson.body;
+  $("#lesson-next").disabled = !lesson.check();
+  $("#lesson-next").textContent =
+    tutorial.step === lessons.length - 1 ? "Finish lesson →" : "Next →";
+}
+$("#learn").onclick = () => {
+  if (!spriteStatus.ready) return;
+  series = null;
+  tutorial = { step: 0 };
+  prefs.targeting = false;
+  prefs.guide = true;
+  prefs.guideLength = "short";
+  start({
+    seed: 42,
+    map: "highlands",
+    landscape: "rolling",
+    mode: "practice",
+    timer: false,
+    hp: 300,
+    teams: [[0, 1, 2, 3, 6, 17], [1]],
+    profiles: prefs.profiles,
+  });
+  current().move = 0;
+  buildMoves();
+  updateHUD();
+};
+$("#lesson-next").onclick = () => {
+  if (tutorial.step === lessons.length - 1) {
+    tutorial = null;
+    $("#tutorial-card").hidden = true;
+  } else {
+    tutorial.step++;
+    updateLesson();
+  }
+};
+$("#lesson-exit").onclick = home;
+buildTrainers();
 buildMaps();
 $("#difficulty-description").textContent = (
   difficultyProfiles[prefs.difficulty] || difficultyProfiles.normal
@@ -828,6 +1210,21 @@ window.battlefront = {
           selection: { ...current() },
           log: [...battle.log],
           winner: battle.winner,
+          maxHP: battle.maxHP,
+          opening: battle.opening,
+          profiles: battle.players.map((p) => ({ ...p.profile })),
+          landscape: battle.terrain.profile,
+          relief: battle.terrain.relief,
+          hazards: battle.hazards.map((h) => ({ ...h })),
+          ice: battle.ice.length,
+          aim: {
+            guide: prefs.guide,
+            guideLength: prefs.guideLength,
+            targeting: prefs.targeting,
+          },
+          lastShots: battle.lastShots,
+          series,
+          tutorial: tutorial ? { ...tutorial } : null,
         }
       : {
           playing: false,

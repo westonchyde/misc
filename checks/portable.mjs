@@ -33,6 +33,7 @@ try {
     (await page.evaluate(() => window.battlefront.state)).assets.loaded,
     18,
   );
+  await page.locator("#aim-style").selectOption("assisted");
   await page.locator(".mode-card:has(input[value=practice])").click();
   await page.locator("#start").click();
   await page.locator("#draft-random").click();
@@ -56,7 +57,7 @@ try {
     { timeout: 20000 },
   );
   const final = await page.evaluate(() => window.battlefront.state);
-  assert.ok(final.hp[1] < 180);
+  assert.ok(final.hp[1] < final.maxHP);
   assert.ok(final.terrainVersion > 0);
   assert.equal(final.active, 0);
   assert.deepEqual(requests, []);
@@ -64,7 +65,7 @@ try {
   const fire = await page.locator("#fire").boundingBox();
   assert.ok(fire.y + fire.height <= 900);
   await page.screenshot({
-    path: "/tmp/battlefront-v3-portable.png",
+    path: "/tmp/battlefront-v4-portable.png",
     fullPage: true,
   });
   console.log(
