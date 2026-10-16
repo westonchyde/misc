@@ -1,18 +1,26 @@
 import { roster, BALLISTIC, REMOTE } from "./content.js";
 import { makeHeights } from "./landscapes.js";
+import { createPool, advancePool } from "./flood.js";
 import { cleanProfile } from "./trainers.js";
-export const W = 1280,
-  H = 680,
-  SEA = 632,
-  GROUND = SEA,
+import {
+  W,
+  H,
+  SEA,
+  SPAWNS,
+  ISLAND_GAP,
+  LAUNCH_BASE,
+  LAUNCH_POWER,
+} from "./world.js";
+export { W, H, SEA, VIEW_W, SPAWNS } from "./world.js";
+export const GROUND = SEA,
   DT = 1 / 60,
   GRAVITY = 440;
 export const RULES = {
-  hp: 180,
-  movement: 125,
+  hp: 350,
+  movement: 180,
   turnTime: 45,
   jumpCost: 18,
-  maxFallDamage: 35,
+  maxFallDamage: 55,
   impulseScale: 0.58,
 };
 export function random(seed) {
@@ -38,9 +46,11 @@ export class Terrain {
       (map === "islands" ? "islands" : map === "sunset" ? "valley" : "rolling");
     this.relief = relief;
     this.version = 0;
+    this.dirty = { x0: 0, y0: 0, x1: W, y1: H };
     this.heights = makeHeights(seed, this.profile, relief);
     for (let x = 28; x < W - 28; x++) {
-      if (this.profile === "islands" && x > 585 && x < 695) continue;
+      if (this.profile === "islands" && x > ISLAND_GAP[0] && x < ISLAND_GAP[1])
+        continue;
       for (let y = this.surface(x); y < SEA + 12; y++)
         this.cells[y * W + x] = 1;
     }
@@ -73,7 +83,25 @@ export class Terrain {
           changed = true;
         }
       }
-    if (changed) this.version++;
+    if (changed) {
+      this.version++;
+      const d = {
+        x0: Math.max(0, Math.floor(x - r - 16)),
+        // A fill can raise the first surface far above old grass. Invalidate
+        // the whole vertical strip so both the former and new surface redraw.
+        y0: 0,
+        x1: Math.min(W, Math.ceil(x + r + 16)),
+        y1: H,
+      };
+      this.dirty = this.dirty
+        ? {
+            x0: Math.min(d.x0, this.dirty.x0),
+            y0: Math.min(d.y0, this.dirty.y0),
+            x1: Math.max(d.x1, this.dirty.x1),
+            y1: Math.max(d.y1, this.dirty.y1),
+          }
+        : d;
+    }
   }
   top(x, from = 0) {
     for (let y = Math.max(0, Math.floor(from)); y < SEA; y++)
@@ -93,7 +121,7 @@ export function angleVector(angle) {
   return { x: Math.cos(a), y: -Math.sin(a) };
 }
 export function speedFor(power) {
-  return 260 + power * 5.6;
+  return LAUNCH_BASE + power * LAUNCH_POWER;
 }
 export function originFor(player, angle, move) {
   const dir = Math.cos((angle * Math.PI) / 180) >= 0 ? 1 : -1;
@@ -107,8 +135,30 @@ export function originFor(player, angle, move) {
 // One authoritative projectile integrator is used by previews, AI and live shots.
 export function advanceProjectile(battle, shot, move, owner) {
   shot.age += DT;
-  shot.vx += battle.wind * DT;
-  shot.vy += GRAVITY * (move.gravityScale || 1) * DT;
+  if (move.homing && shot.age > 0.35) {
+    const target = battle.players[1 - owner],
+      dx = target.x - shot.x,
+      dy = target.y - 22 - shot.y;
+    if (Math.hypot(dx, dy) < move.homing.range) {
+      const current = Math.atan2(shot.vy, shot.vx),
+        desired = Math.atan2(dy, dx),
+        delta = Math.atan2(
+          Math.sin(desired - current),
+          Math.cos(desired - current),
+        );
+      const angle =
+          current +
+          Math.max(
+            -move.homing.turn * DT,
+            Math.min(move.homing.turn * DT, delta),
+          ),
+        speed = Math.hypot(shot.vx, shot.vy);
+      shot.vx = Math.cos(angle) * speed;
+      shot.vy = Math.sin(angle) * speed;
+    }
+  }
+  shot.vx += battle.wind * (move.windScale ?? 1) * DT;
+  shot.vy += GRAVITY * (move.gravityScale ?? 1) * DT;
   const steps = Math.max(1, Math.ceil((Math.hypot(shot.vx, shot.vy) * DT) / 3));
   for (let i = 0; i < steps; i++) {
     const previousX = shot.x,
@@ -118,8 +168,9 @@ export function advanceProjectile(battle, shot, move, owner) {
     const rival = battle.players[1 - owner];
     const direct =
       rival.hp > 0 &&
-      Math.abs(rival.x - shot.x) < 12 &&
-      Math.abs(rival.y - shot.y) < 22;
+      Math.abs(rival.x - shot.x) < 11 &&
+      shot.y > rival.y - 64 &&
+      shot.y < rival.y + 19;
     const terrain =
       battle.terrain.solid(shot.x, shot.y) &&
       (move.kind !== "phase" || (shot.vy > 0 && shot.age > 0.2));
@@ -166,8 +217,8 @@ export function makeProjectile(player, angle, power, delay = 0, move) {
     d = angleVector(angle);
   return {
     ...o,
-    vx: d.x * speedFor(power),
-    vy: d.y * speedFor(power),
+    vx: d.x * (move?.velocity || speedFor(power)),
+    vy: d.y * (move?.velocity || speedFor(power)),
     age: 0,
     delay,
     bounces: move?.behavior === "bounce" ? 2 : 0,
@@ -184,6 +235,19 @@ export function traceShot(
 ) {
   const p = battle.players[owner],
     o = originFor(p, angle, move);
+  if (move.kind === "utility")
+    return {
+      points: [
+        { x: p.x, y: p.y },
+        {
+          x: p.x + p.facing * 220,
+          y: battle.terrain.top(p.x + p.facing * 220),
+        },
+      ],
+      x: p.x + p.facing * 220,
+      y: battle.terrain.top(p.x + p.facing * 220),
+      direct: false,
+    };
   if (BALLISTIC.has(move.kind)) {
     const shot = makeProjectile(p, angle, power, 0, move),
       points = [{ ...o }];
@@ -231,7 +295,7 @@ export class Battle {
         (team) =>
           !Array.isArray(team) ||
           team.length < 1 ||
-          team.length > 18 ||
+          team.length > roster.length ||
           new Set(team).size !== team.length ||
           team.some((i) => !Number.isInteger(i) || !roster[i]),
       )
@@ -245,12 +309,12 @@ export class Battle {
       this.options.landscape,
       this.options.relief,
     );
-    this.players = [260, 1020].map((x, i) => ({
+    this.players = SPAWNS.map((x, i) => ({
       x,
       y: this.terrain.top(x) - 19,
       vx: 0,
       vy: 0,
-      hp: [180, 240, 300].includes(+options.hp) ? +options.hp : RULES.hp,
+      hp: [250, 350, 500].includes(+options.hp) ? +options.hp : RULES.hp,
       profile: cleanProfile(options.profiles?.[i], i),
       name: cleanProfile(options.profiles?.[i], i).name.toUpperCase(),
       wet: 0,
@@ -266,6 +330,7 @@ export class Battle {
       poison: 0,
       chill: 0,
       weaken: 0,
+      muddy: 0,
       damage: 0,
       hits: 0,
       shots: 0,
@@ -280,6 +345,7 @@ export class Battle {
     this.hazards = [];
     this.ice = [];
     this.lastShots = [null, null];
+    this.pools = [];
     this.phase = "aim";
     this.phaseTime = 0;
     this.budget = RULES.movement;
@@ -312,8 +378,10 @@ export class Battle {
     this.phaseTime = 0;
   }
   collides(x, y) {
-    return [-7, 0, 7].some((dx) =>
-      [-16, -4, 8, 17].some((dy) => this.terrain.solid(x + dx, y + dy)),
+    return [-9, 0, 9].some((dx) =>
+      [-62, -42, -22, -4, 8, 17].some((dy) =>
+        this.terrain.solid(x + dx, y + dy),
+      ),
     );
   }
   canAct() {
@@ -341,7 +409,7 @@ export class Battle {
     const p = this.players[this.active];
     if (!this.canAct() || !p.grounded || this.budget < RULES.jumpCost)
       return false;
-    p.vy = -235;
+    p.vy = -270;
     p.grounded = false;
     this.budget -= RULES.jumpCost;
     this.emit("jump", { x: p.x, y: p.y });
@@ -452,6 +520,7 @@ export class Battle {
     if (effect === "poison") p.poison = 2;
     if (effect === "chill") p.chill = 1;
     if (effect === "weaken") p.weaken = 2;
+    if (effect === "mud") p.muddy = 1;
     if (source !== index && source !== null) {
       this.players[source].damage += amount;
       if (amount) this.players[source].hits++;
@@ -465,7 +534,7 @@ export class Battle {
       const p = this.players[i],
         d = Math.hypot(p.x - x, p.y - y),
         reach = move.radius + 32;
-      if (p.hp <= 0 || d >= reach) continue;
+      if (p.hp <= 0 || (d >= reach && i !== directIndex)) continue;
       let scale = Math.max(0, 1 - Math.max(0, d - 15) / reach);
       if (
         d > 32 &&
@@ -473,7 +542,14 @@ export class Battle {
         this.terrain.lineBlocked(x, y - 5, p.x, p.y - 8)
       )
         scale *= 0.55;
-      const damage = i === directIndex ? move.damage : move.damage * scale;
+      const damage = move.directOnly
+        ? i === directIndex
+          ? move.damage
+          : 0
+        : i === directIndex
+          ? move.damage
+          : move.damage * scale;
+      if (move.directOnly && i !== directIndex) continue;
       this.damagePlayer(
         i,
         damage,
@@ -505,6 +581,24 @@ export class Battle {
     });
   }
   resolveImpact(x, y, m, directIndex = -1) {
+    if (m.behavior === "flood") {
+      this.pools.push(createPool(x, y, this.active, m.waterVolume));
+      this.emit("flood-start", {
+        x,
+        y,
+        owner: this.active,
+        volume: m.waterVolume,
+      });
+      this.emit("impact", {
+        x,
+        y,
+        color: m.color,
+        radius: 70,
+        kind: m.id,
+        visual: m.visual,
+      });
+      return;
+    }
     if (m.behavior === "seeds" && !m.fragment) {
       this.emit("burst", {
         x,
@@ -597,17 +691,19 @@ export class Battle {
       });
       return;
     }
-    const terrainRadius = [
-      "ring",
-      "seismic",
-      "lift",
-      "spikes",
-      "sweep",
-      "eruption",
-      "tunnel",
-    ].includes(m.pattern)
-      ? Math.min(40, m.radius)
-      : m.radius;
+    const terrainRadius =
+      m.terrainRadius ??
+      ([
+        "ring",
+        "seismic",
+        "lift",
+        "spikes",
+        "sweep",
+        "eruption",
+        "tunnel",
+      ].includes(m.pattern)
+        ? Math.min(40, m.radius)
+        : m.radius);
     this.hit(
       x,
       y,
@@ -626,6 +722,19 @@ export class Battle {
     if (m.behavior === "flame")
       for (const dx of [-55, -28, 0, 28, 55])
         this.addHazard("fire", x + dx, y, 20);
+    if (m.behavior === "mud") {
+      for (const offset of [-60, 60]) {
+        const px = x + offset,
+          py = this.terrain.top(px, Math.max(0, y - 65));
+        if (
+          py >= SEA ||
+          this.players.some((p) => p.hp > 0 && Math.abs(p.x - px) < 34)
+        )
+          continue;
+        for (let h = 0; h < 62; h += 6)
+          this.terrain.circle(px, py - h, Math.max(9, 36 - h * 0.4), 1);
+      }
+    }
     if (m.behavior === "sludge") this.addHazard("poison", x, y, 34);
     if (m.behavior === "lava" && !m.fragment) {
       for (const [i, vx] of [-120, -55, 55, 120].entries())
@@ -719,6 +828,21 @@ export class Battle {
       m = this.currentMove,
       p = this.players[this.active];
     this.emit("attack", { kind: m.kind, visual: m.visual, color: m.color });
+    if (m.kind === "utility") {
+      const targetX = Math.max(80, Math.min(W - 80, p.x + p.facing * 220)),
+        targetY = this.terrain.top(targetX);
+      this.attack = {
+        origin: { x: p.x, y: p.y },
+        x: targetX,
+        y: Math.min(SEA - 70, targetY - 19),
+        progress: 0,
+        duration: 1.65,
+        rescue: true,
+        hit: [],
+      };
+      this.setPhase("attack");
+      return;
+    }
     if (BALLISTIC.has(m.kind)) {
       const count =
         m.behavior === "stream" ? 4 : m.kind === "salvo" ? m.count : 1;
@@ -751,16 +875,31 @@ export class Battle {
       m = this.currentMove,
       prev = a.progress;
     a.progress = Math.min(1, this.phaseTime / a.duration);
+    if (a.rescue) {
+      const q = Math.max(0, Math.min(1, (a.progress - 0.15) / 0.7)),
+        p = this.players[this.active];
+      const x = a.origin.x + (a.x - a.origin.x) * q,
+        y = a.origin.y + (a.y - a.origin.y) * q;
+      this.terrain.circle(x, y - 20, 54);
+      p.x = x;
+      p.y = y;
+      p.vx = 0;
+      p.vy = 0;
+      this.summon.x = x + p.facing * 45;
+      this.summon.y = y + 29;
+      if (a.progress === 1) this.setPhase("settle");
+      return;
+    }
     if (a.remote) {
       if (m.behavior === "burrow" && a.progress > 0.22 && a.progress < 0.6) {
         const q = Math.min(1, (a.progress - 0.22) / 0.36),
           dir = this.players[this.active].facing;
-        a.burrowX = a.x - dir * 130 * (1 - q);
+        a.burrowX = (a.entryX ?? a.x - dir * 130) * (1 - q) + a.x * q;
         a.burrowY = a.y + 44;
         this.terrain.circle(a.burrowX, a.burrowY, 25);
         if (q < 0.15)
           for (let y = a.y - 5; y < a.y + 45; y += 8)
-            this.terrain.circle(a.x - dir * 130, y, 23);
+            this.terrain.circle(a.entryX ?? a.x - dir * 130, y, 23);
       }
       if (m.behavior === "levitate" && a.progress > 0.24 && a.progress < 0.58)
         for (const p of this.players) {
@@ -834,9 +973,13 @@ export class Battle {
       if (REMOTE.has(m.kind)) {
         const y =
           Math.min(SEA, this.terrain.top(hit.x, Math.max(0, hit.y - 12))) - 2;
+        const rival = this.players[1 - this.active];
+        const seek = m.seekRange && Math.abs(rival.x - hit.x) < m.seekRange;
         this.attack = {
           ...hit,
-          y,
+          x: seek ? rival.x : hit.x,
+          y: seek ? rival.y + 17 : y,
+          entryX: hit.x,
           origin: { x: this.summon.x, y: this.summon.y },
           progress: 0,
           duration: ["body-slam", "eruption", "dragon-rush", "dig"].includes(
@@ -1034,6 +1177,7 @@ export class Battle {
         expires: this.turn + 4,
       });
       this.terrain.version++;
+      this.terrain.dirty = { x0: 0, y0: 0, x1: W, y1: H };
       h.expires = this.turn;
     }
     this.hazards = this.hazards.filter((h) => h.expires > this.turn);
@@ -1053,7 +1197,7 @@ export class Battle {
             found = true;
             break;
           }
-        if (!found) this.terrain.circle(p.x, p.y, 25);
+        if (!found) this.terrain.circle(p.x, p.y - 20, 55);
       }
       const n = Math.max(
         1,
@@ -1098,6 +1242,35 @@ export class Battle {
     this.clock += DT;
     this.phaseTime += DT;
     this.physics();
+    const activePools = [];
+    for (const pool of this.pools) {
+      if (advancePool(pool, this, DT)) activePools.push(pool);
+      else {
+        this.emit("flood-end", {
+          x: pool.x,
+          y: pool.y,
+          pulses: pool.pulses,
+          damage: [...pool.damage],
+        });
+        for (let c = 4; c < pool.cols - 4; c += 4) {
+          let wet = false;
+          for (let r = 0; r < pool.rows; r++)
+            if (pool.grid[r * pool.cols + c] > 64) {
+              wet = true;
+              break;
+            }
+          if (wet)
+            this.addHazard(
+              "water",
+              pool.x0 + c * 8,
+              this.terrain.top(pool.x0 + c * 8),
+              26,
+              pool.owner,
+            );
+        }
+      }
+    }
+    this.pools = activePools;
     this.updateHazards();
     const waiting = [];
     for (const impact of this.pendingImpacts) {
@@ -1134,7 +1307,8 @@ export class Battle {
       if (
         this.stable > 0.25 &&
         this.phaseTime > 0.45 &&
-        !this.pendingImpacts.length
+        !this.pendingImpacts.length &&
+        !this.pools.length
       )
         this.setPhase("recall");
       // Cancel only negligible numerical drift; never advance over a falling body.
@@ -1180,6 +1354,7 @@ export class Battle {
         for (const idx of shelf.cells)
           if (this.terrain.cells[idx] === 2) this.terrain.cells[idx] = 0;
         this.terrain.version++;
+        this.terrain.dirty = { x0: 0, y0: 0, x1: W, y1: H };
       }
     this.ice = this.ice.filter((s) => s.expires > this.turn);
     const p = this.players[this.active];
@@ -1198,8 +1373,9 @@ export class Battle {
     if (p.weaken) p.weaken--;
     if (p.wet) p.wet--;
     this.budget = Math.round(
-      RULES.movement * (p.curse ? 0.5 : p.chill ? 0.65 : 1),
+      RULES.movement * (p.curse ? 0.5 : p.chill ? 0.65 : p.muddy ? 0.7 : 1),
     );
+    p.muddy = 0;
     p.chill = 0;
     p.curse = 0;
     if (this.checkVictory()) return;
@@ -1252,6 +1428,7 @@ export class Battle {
       },
       winner: this.winner,
       hazards: this.hazards,
+      pools: this.pools,
       ice: this.ice,
       lastShots: this.lastShots,
     });

@@ -54,11 +54,11 @@ try {
     "2",
   );
   await page.locator("#first-player").selectOption("1");
-  await page.locator("#match-hp").selectOption("300");
+  await page.locator("#match-hp").selectOption("500");
   await page.locator("#timer-option").uncheck();
   await page.locator(".mode-card:has(input[value=hotseat])").click();
   await page.screenshot({
-    path: "/tmp/battlefront-v4-customization.png",
+    path: "/tmp/battlefront-v5-customization.png",
     fullPage: true,
   });
   await page.locator("#start").click();
@@ -69,17 +69,17 @@ try {
   assert.equal((await state()).draft.picks.length, before);
   assert.match(
     await page.locator("#inspect-details").innerText(),
-    /Pressure stream/i,
+    /Water rocket/i,
   );
   await page.locator('[data-demo-move="1"]').click();
   assert.match(
     await page.locator("#inspect-details").innerText(),
-    /Expanding pulse/i,
+    /Pit-filling water/i,
   );
   await page.locator("#draft-confirm").click();
   assert.equal((await state()).draft.picks.length, before + 1);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-draft-inspection.png",
+    path: "/tmp/battlefront-v5-draft-inspection.png",
     fullPage: true,
   });
   await page.locator("#draft-random").click();
@@ -88,11 +88,19 @@ try {
   const s = await state();
   assert.equal(s.active, 1);
   assert.equal(s.opening, 1);
-  assert.equal(s.maxHP, 300);
+  assert.equal(s.maxHP, 500);
   assert.equal(s.profiles[0].palette, 2);
   assert.equal(s.landscape, "mountain");
   assert.equal(s.relief, "dramatic");
   assert.equal(s.aim.targeting, false);
+  // Random teams can now open on a local rescue utility; use an aimable partner for this check.
+  const { roster } = await import("../src/content.js");
+  await page
+    .getByRole("button", {
+      name: roster[s.teams[s.active].find((i) => i !== 18)].name,
+      exact: true,
+    })
+    .click();
   // Cycle short -> full -> direction only. Turning assistance off must not change camera scale.
   const viewBefore = s.view;
   await page.locator("#guide-toggle").click();
@@ -121,12 +129,12 @@ try {
   await page.locator("#angle").fill("65");
   assert.equal(Math.round((await state()).selection.angle), 115);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-mountain-direction.png",
+    path: "/tmp/battlefront-v5-mountain-direction.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
-    path: "/tmp/battlefront-v4-mobile.png",
+    path: "/tmp/battlefront-v5-mobile.png",
     fullPage: true,
   });
   assert.ok(
@@ -169,7 +177,7 @@ try {
   await page.locator("#lesson-next").click();
   assert.equal((await state()).tutorial.step, 4);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-tutorial.png",
+    path: "/tmp/battlefront-v5-tutorial.png",
     fullPage: true,
   });
   await page.locator("#lesson-next").click();

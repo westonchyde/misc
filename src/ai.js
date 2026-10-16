@@ -1,5 +1,6 @@
 import { roster, BALLISTIC, REMOTE, difficultyProfiles } from "./content.js";
-import { traceShot, originFor, SEA, W, RULES } from "./simulation.js";
+import { traceShot, originFor, SEA, W, RULES, GRAVITY } from "./simulation.js";
+import { LAUNCH_BASE, LAUNCH_POWER } from "./world.js";
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function evaluateShot(
   battle,
@@ -13,6 +14,21 @@ export function evaluateShot(
   const move = roster[species].moves[moveIndex],
     me = battle.players[battle.active],
     rival = battle.players[1 - battle.active];
+  if (move.kind === "utility") {
+    const front = battle.terrain.top(me.x + me.facing * 75),
+      back = battle.terrain.top(me.x - me.facing * 75);
+    const trapped = Math.min(front, back) < me.y - 45;
+    return {
+      species,
+      moveIndex,
+      angle,
+      power,
+      score: trapped ? 28 : -35,
+      predicted: 0,
+      self: 0,
+      target: trace,
+    };
+  }
   let predicted = 0,
     self = 0,
     alignment = 0;
@@ -24,6 +40,16 @@ export function evaluateShot(
     alignment = d;
     predicted = damage * Math.max(0, 1 - Math.max(0, d - 15) / reach);
     if (trace.direct) predicted = damage;
+    if (move.directOnly) predicted = trace.direct ? damage : 0;
+    if (move.behavior === "flood") {
+      const foot = rival.y + 19,
+        wall = Math.min(
+          foot - battle.terrain.top(rival.x - 90),
+          foot - battle.terrain.top(rival.x + 90),
+        );
+      predicted =
+        (wall > 35 ? 65 : wall > 12 ? 30 : 5) * Math.max(0, 1 - d / 160);
+    }
     if (move.kind === "cluster") predicted *= 0.8;
     if (
       d > 32 &&
@@ -107,7 +133,97 @@ export function evaluateShot(
     target: trace,
   };
 }
+function rookieShot(battle) {
+  const owner = battle.active,
+    me = battle.players[owner],
+    rival = battle.players[1 - owner],
+    rng = battle.rng;
+  const choices = me.team
+    .flatMap((species) =>
+      roster[species].moves.map((move, moveIndex) => ({
+        species,
+        moveIndex,
+        move,
+      })),
+    )
+    .filter(
+      (o) =>
+        battle.available(o.species, o.moveIndex) && o.move.kind !== "utility",
+    );
+  if (!choices.length) {
+    const s = me.team.find((s) =>
+      roster[s].moves.some((m, i) => battle.available(s, i)),
+    );
+    return s === undefined
+      ? null
+      : {
+          species: s,
+          moveIndex: roster[s].moves.findIndex((m, i) =>
+            battle.available(s, i),
+          ),
+          angle: me.facing === 1 ? 45 : 135,
+          power: 55,
+          score: 0,
+          diagnostics: {
+            level: "easy",
+            forecasts: 0,
+            candidates: 1,
+            trajectories: 0,
+            conserve: false,
+            statusWeight: 0,
+          },
+        };
+  }
+  const option = choices[Math.floor(rng() * choices.length)],
+    m = option.move,
+    right = rival.x >= me.x;
+  const origin = originFor(me, right ? 0 : 180, m),
+    distance = Math.abs(rival.x - origin.x);
+  const error = (40 + Math.min(110, distance * 0.05)) * (rng() < 0.5 ? -1 : 1),
+    tx = clamp(rival.x + error, 40, W - 40),
+    ty = rival.y - 20 + (rng() - 0.5) * 90;
+  let angle, power;
+  if (m.kind === "beam" || m.velocity) {
+    angle = (Math.atan2(origin.y - ty, tx - origin.x) * 180) / Math.PI;
+    if (angle < -90) angle += 360;
+    power = 70;
+  } else {
+    const elevation = [32, 43, 54, 65][Math.floor(rng() * 4)],
+      a = (elevation * Math.PI) / 180,
+      dx = Math.abs(tx - origin.x),
+      dy = ty - origin.y;
+    const denominator = 2 * Math.cos(a) ** 2 * (dy + dx * Math.tan(a));
+    const speed =
+      denominator > 0
+        ? Math.sqrt((GRAVITY * (m.gravityScale ?? 1) * dx * dx) / denominator)
+        : 1000;
+    power = clamp(
+      (speed - LAUNCH_BASE) / LAUNCH_POWER + (rng() - 0.5) * 8,
+      20,
+      100,
+    );
+    angle = right ? elevation : 180 - elevation;
+  }
+  angle = clamp(angle + (rng() - 0.5) * 4, -65, 245);
+  return {
+    species: option.species,
+    moveIndex: option.moveIndex,
+    angle,
+    power,
+    score: 0,
+    perception: { targetX: tx, targetY: ty },
+    diagnostics: {
+      level: "easy",
+      forecasts: 0,
+      candidates: 1,
+      trajectories: 0,
+      conserve: false,
+      statusWeight: 0,
+    },
+  };
+}
 export function planShot(battle) {
+  if (battle.options.difficulty === "easy") return rookieShot(battle);
   const profile =
       difficultyProfiles[battle.options.difficulty] ||
       difficultyProfiles.normal,
@@ -130,7 +246,7 @@ export function planShot(battle) {
   let evaluations = 0;
   function evaluate(s, m, a, p) {
     const move = roster[s].moves[m],
-      key = `${move.kind === "beam" ? "beam" : move.kind === "phase" ? "phase" : move.behavior === "bounce" ? "bounce" : "arc"}:${REMOTE.has(move.kind) ? "55,-42" : move.anchor}:${move.gravityScale || 1}:${a.toFixed(3)}:${p.toFixed(3)}`;
+      key = `${move.id}:${move.kind === "beam" ? "beam" : move.kind === "phase" ? "phase" : move.behavior === "bounce" ? "bounce" : "arc"}:${REMOTE.has(move.kind) ? "55,-42" : move.anchor}:${move.gravityScale || 1}:${a.toFixed(3)}:${p.toFixed(3)}`;
     let trace = cache.get(key);
     if (!trace) {
       trace = traceShot(battle, move, a, p, battle.active, false);
@@ -144,8 +260,21 @@ export function planShot(battle) {
       if (!battle.available(s, m)) continue;
       let best = null;
       const options = [];
-      for (const a of angles)
-        for (const p of roster[s].moves[m].kind === "beam" ? [70] : powers) {
+      const move = roster[s].moves[m];
+      const o = originFor(me, right ? 0 : 180, move);
+      let directAngle =
+        (Math.atan2(o.y - (rival.y - 22), rival.x - o.x) * 180) / Math.PI;
+      if (directAngle < -90) directAngle += 360;
+      const moveAngles =
+        move.kind === "utility"
+          ? [right ? 45 : 135]
+          : [...angles, clamp(directAngle, -65, 245)];
+      for (const a of moveAngles)
+        for (const p of move.kind === "beam" ||
+        move.velocity ||
+        move.kind === "utility"
+          ? [70]
+          : powers) {
           const option = evaluate(s, m, a, p);
           options.push(option);
           if (!best || option.score > best.score) best = option;
@@ -249,7 +378,21 @@ export function planShot(battle) {
       hazard +
       wetBonus -
       m.cooldown * 0.6 +
-      (foe.hp === 0 ? 45 : 0);
+      (foe.hp === 0 ? 45 : 0) +
+      (m.kind === "utility" ? Math.max(-20, option.score) : 0);
+    const oldCover = battle.terrain.lineBlocked(
+        me.x,
+        me.y - 25,
+        rival.x,
+        rival.y - 25,
+      ),
+      newCover = sim.terrain.lineBlocked(
+        sim.players[owner].x,
+        sim.players[owner].y - 25,
+        foe.x,
+        foe.y - 25,
+      );
+    if (oldCover && !newCover) option.score += 12 * profile.terrainWeight;
     option.forecast = {
       damage: dealt,
       self,

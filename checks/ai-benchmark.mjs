@@ -13,7 +13,7 @@ for (let game = 0; game < 20; game++) {
       seed: game + 31,
       landscape: landscapes[game % landscapes.length].id,
       relief: game % 2 ? "dramatic" : "normal",
-      hp: 240,
+      hp: 350,
       first: (game >> 1) % 2,
       teams: randomTeams(game + 51),
     });

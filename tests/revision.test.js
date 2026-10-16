@@ -90,14 +90,14 @@ test("scenery does not secretly change an explicitly selected gameplay silhouett
 });
 test("trainer profiles, HP and opening owner are normalized without affecting team legality", () => {
   const b = create({
-    hp: 300,
+    hp: 500,
     first: 1,
     profiles: [
       { name: "<Weston!>", palette: 4, skin: 2, style: 2 },
       { name: "Rival", palette: 999 },
     ],
   });
-  assert.equal(b.maxHP, 300);
+  assert.equal(b.maxHP, 500);
   assert.equal(b.players[0].name, "WESTON");
   assert.equal(b.players[0].profile.palette, 4);
   assert.equal(b.players[1].profile.palette, 1);
@@ -168,7 +168,7 @@ test("Seed Bomb fragments fly, separate and collide instead of scheduling fixed 
   assert.ok(new Set(impacts.map((e) => Math.round(e.x))).size >= 2);
   assert.equal(b.projectiles.length, 0);
 });
-test("Hydro Pump sends four pulses, creates runoff and does not knock a spawn trainer across the whole arena", () => {
+test("Hydro Pump is a single strong rocket, distinct from pit-filling Water Spout", () => {
   const b = create();
   tick(b);
   const initial = b.players[1].x,
@@ -176,9 +176,10 @@ test("Hydro Pump sends four pulses, creates runoff and does not knock a spawn tr
     aim = aimAt(b, m, b.players[1].x, b.players[1].y);
   b.commit(1, 0, aim.angle, aim.power);
   while (b.phase === "summon") b.step();
-  assert.equal(b.projectiles.length, 4);
+  assert.equal(b.projectiles.length, 1);
   finish(b);
-  assert.ok(b.hazards.some((h) => h.type === "water"));
+  assert.equal(b.pools.length, 0);
+  assert.ok(b.players[1].wet > 0);
   assert.ok(b.players[1].hp < RULES.hp);
   assert.ok(b.players[1].hp > 0);
   assert.ok(Math.abs(b.players[1].x - initial) < 200);

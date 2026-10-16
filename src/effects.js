@@ -172,6 +172,44 @@ export function drawProjectile(c, m, x, y, t, rotation = 0) {
   c.rotate(rotation);
   const col = m.color;
   switch (id) {
+    case "octazooka":
+      line(
+        c,
+        [
+          [-48, 0],
+          [-5, 0],
+        ],
+        "#d4f7f5",
+        3,
+      );
+      oval(c, 0, 0, 9, 5, "#17263d", "#83cfeb", 2);
+      oval(c, 3, -2, 3, 1, "#e7fbf5");
+      break;
+    case "mud-bomb":
+      rock(c, 0, 0, 16, "#926b48", t * 2);
+      for (let i = 0; i < 5; i++)
+        oval(c, -15 - i * 5, Math.sin(i + t * 6) * 8, 3, 4, "#cda475");
+      break;
+    case "bubble-beam":
+      for (let i = 0; i < 4; i++) {
+        const xx = -i * 9,
+          yy = Math.sin(i * 2 + t * 6) * 7;
+        oval(c, xx, yy, 8 - i, 8 - i, "#76ceec66", "#b8f4f1", 2);
+        oval(c, xx - 2, yy - 2, 2, 2, "#fffef4");
+      }
+      break;
+    case "water-spout":
+      droplet(c, 0, 0, 16, "#82e6ef");
+      for (let i = 0; i < 8; i++)
+        droplet(
+          c,
+          -15 - i * 4,
+          Math.sin(t * 6 + i) * 15,
+          3 + (i % 3),
+          "#c5fcf4",
+        );
+      break;
+
     case "fire-blast":
       star(c, 0, 0, 19, "#ff7b32", 5, t * 2);
       star(c, 0, 0, 11, "#fff0a4", 5, t * 2);
@@ -387,6 +425,77 @@ export function drawMoveImpact(c, id, x, y, r, t, life = 1, facing = 1) {
   c.lineJoin = "round";
   c.lineCap = "round";
   switch (id) {
+    case "octazooka":
+      for (let i = 0; i < 13; i++) {
+        const a = i * 2.4,
+          d = r * (0.4 + grow) * 1.4;
+        line(
+          c,
+          [
+            [0, 0],
+            [Math.cos(a) * d, Math.sin(a) * d],
+          ],
+          i % 2 ? "#1d314b" : "#7baabd",
+          2,
+        );
+        oval(c, Math.cos(a) * d, Math.sin(a) * d, 2, 4, "#20364b");
+      }
+      break;
+    case "mud-bomb":
+      for (const side of [-1, 1]) {
+        rock(c, side * r * 0.9, 0, r * 0.55, "#9f784f", side * 0.2);
+        rock(c, side * r * 0.9, -r * 0.4 * grow, r * 0.35, "#c6a16c", side);
+      }
+      for (let i = 0; i < 12; i++)
+        oval(
+          c,
+          Math.sin(i * 3) * r * grow,
+          -Math.abs(Math.cos(i * 3)) * r * grow,
+          3 + (i % 4),
+          4 + (i % 4),
+          "#bd925c",
+        );
+      break;
+    case "bubble-beam":
+      for (let i = 0; i < 9; i++) {
+        const a = i * 2.4;
+        ring(
+          c,
+          Math.cos(a) * r * grow,
+          Math.sin(a) * r * grow - t * 20,
+          5 + (i % 4),
+          "#b3f0ef",
+          2,
+        );
+      }
+      break;
+    case "water-spout":
+      for (let i = 0; i < 18; i++)
+        droplet(
+          c,
+          (i - 8) * r * 0.09,
+          -80 + ((t * 140 + i * 7) % 100),
+          3 + (i % 4),
+          i % 3 ? "#80d8ed" : "#e0fff8",
+        );
+      line(
+        c,
+        [
+          [-r, 5],
+          [0, -3],
+          [r, 5],
+        ],
+        "#c5fbf1",
+        5,
+      );
+      break;
+    case "rescue-dig":
+      for (let i = 0; i < 3; i++) {
+        oval(c, (i - 1) * 24, -12 - grow * 12, 12, 23, "#ae805d", "#453a39", 2);
+        oval(c, (i - 1) * 24 + 4, -15 - grow * 12, 3, 2, "#e8ba8d");
+      }
+      break;
+
     case "flamethrower":
       for (let i = 0; i < 14; i++) {
         const a = -0.8 + i * 0.11;

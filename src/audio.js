@@ -58,7 +58,17 @@ export class AudioFX {
     if (e.type === "attack" && move) {
       const type = move.effect,
         behavior = move.behavior;
-      if (["stream", "water"].includes(behavior)) {
+      if (behavior === "sniper") {
+        this.tone(1500, 90, 0.12, "sawtooth", 0, 0.6);
+        this.noise(0.08, 4200);
+      } else if (["rescue", "mud"].includes(behavior)) {
+        this.noise(0.5, 420);
+        this.tone(120, 40, 0.4, "triangle");
+      } else if (
+        ["stream", "water", "flood", "hydro-rocket", "bubbles"].includes(
+          behavior,
+        )
+      ) {
         this.noise(0.7, 2800);
         this.tone(190, 85, 0.55, "sine");
       } else if (

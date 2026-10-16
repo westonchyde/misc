@@ -26,7 +26,15 @@ export function draftScore(
   const s = roster[index],
     profile = difficultyProfiles[difficulty] || difficultyProfiles.normal;
   let value = s.moves.reduce(
-    (v, m) => v + m.damage * (m.count || 1) * 0.025 + m.radius * 0.015,
+    (v, m) =>
+      v +
+      (m.behavior === "flood"
+        ? 55
+        : m.kind === "utility"
+          ? 18
+          : m.damage * (m.count || 1)) *
+        0.025 +
+      m.radius * 0.015,
     0,
   );
   if (own.some((i) => roster[i].element === s.element)) value -= 5;

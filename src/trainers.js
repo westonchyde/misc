@@ -10,6 +10,7 @@ export const palettes = [
 export const skins = ["#f5d2aa", "#d9a278", "#a96f51", "#754b3f"];
 export const hairstyles = ["Cap", "Headband", "Ranger"];
 export function cleanProfile(value = {}, index = 0) {
+  value = value && typeof value === "object" ? value : {};
   const bounded = (v, max, fallback) =>
     Number.isInteger(+v) && +v >= 0 && +v < max ? +v : fallback;
   return {
@@ -23,9 +24,211 @@ export function cleanProfile(value = {}, index = 0) {
     style: bounded(value.style, hairstyles.length, index),
   };
 }
-function rect(c, x, y, w, h, col) {
-  c.fillStyle = col;
-  c.fillRect(Math.round(x), Math.round(y), w, h);
+// Six-head-tall human proportions: small head, shoulders, articulated arms and long legs.
+const frameCache = new Map();
+function paint(c, profile, pose, frame) {
+  const col = palettes[profile.palette],
+    skin = skins[profile.skin],
+    ink = "#202939",
+    shade = ["#c18a68", "#af7856", "#81533f", "#51362f"][profile.skin];
+  const r = (x, y, w, h, color) => {
+    c.fillStyle = color;
+    c.fillRect(x, y, w, h);
+  };
+  const poly = (points, color) => {
+    c.fillStyle = color;
+    c.beginPath();
+    points.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+    c.closePath();
+    c.fill();
+  };
+  const walk = pose === "walk" ? [0, 2, 0, -2][frame % 4] : 0,
+    bob = pose === "walk" ? frame % 2 : 0;
+  // Rear backpack and shoulder strap.
+  poly(
+    [
+      [7, 20 + bob],
+      [10, 18 + bob],
+      [13, 21 + bob],
+      [12, 34 + bob],
+      [7, 34 + bob],
+      [6, 30 + bob],
+    ],
+    ink,
+  );
+  r(7, 23 + bob, 5, 9, col.dark);
+  r(7, 24 + bob, 2, 6, col.main);
+  r(7, 31 + bob, 4, 1, "#ac8a65");
+  // Long separated trouser legs, knees and compact shoes.
+  for (const [x, dx, dy] of [
+    [12, -walk, Math.max(0, walk)],
+    [19, walk, Math.max(0, -walk)],
+  ]) {
+    poly(
+      [
+        [x, 32],
+        [x + 5, 32],
+        [x + 5 + dx, 41],
+        [x + 4 + dx, 51 - dy],
+        [x + dx, 51 - dy],
+        [x - 1 + dx, 42],
+      ],
+      ink,
+    );
+    poly(
+      [
+        [x + 1, 33],
+        [x + 4, 33],
+        [x + 3 + dx, 41],
+        [x + 3 + dx, 49 - dy],
+        [x + 1 + dx, 49 - dy],
+      ],
+      "#455569",
+    );
+    r(x + 2 + dx, 39, 2, 4, "#687d8d");
+    r(x + dx, 49 - dy, 7, 3, ink);
+    r(x + dx + 1, 49 - dy, 5, 2, "#dadbd2");
+    r(x + dx + 1, 51 - dy, 6, 1, "#85999f");
+  }
+  // Jacket, tapered waist, hem, undershirt and zipper.
+  poly(
+    [
+      [11, 18 + bob],
+      [23, 18 + bob],
+      [25, 24 + bob],
+      [23, 34 + bob],
+      [12, 34 + bob],
+      [9, 24 + bob],
+    ],
+    ink,
+  );
+  poly(
+    [
+      [12, 19 + bob],
+      [21, 19 + bob],
+      [23, 25 + bob],
+      [21, 32 + bob],
+      [13, 32 + bob],
+      [11, 24 + bob],
+    ],
+    col.main,
+  );
+  poly(
+    [
+      [12, 19 + bob],
+      [16, 19 + bob],
+      [15, 29 + bob],
+      [12, 30 + bob],
+    ],
+    col.light,
+  );
+  r(16, 20 + bob, 4, 12, "#ebe7cd");
+  r(17, 20 + bob, 1, 10, "#fff7df");
+  r(20, 22 + bob, 2, 8, col.dark);
+  r(13, 32 + bob, 9, 2, col.dark);
+  r(17, 32 + bob, 2, 1, "#eac071");
+  r(11, 21 + bob, 2, 10, "#c4b48b");
+  r(12, 26 + bob, 2, 5, "#8f725e");
+  // Neck, small 3/4 head, ear, brow, nose, mouth and shaded jaw.
+  r(15, 15 + bob, 5, 5, ink);
+  r(16, 15 + bob, 3, 4, skin);
+  r(15, 7 + bob, 8, 10, ink);
+  r(15, 6 + bob, 6, 2, ink);
+  r(16, 8 + bob, 6, 8, skin);
+  r(15, 9 + bob, 2, 5, shade);
+  r(15, 10 + bob, 2, 3, skin);
+  r(21, 10 + bob, 2, 4, skin);
+  r(19, 9 + bob, 3, 1, "#5b463e");
+  r(20, 10 + bob, 1, 2, "#192a37");
+  r(22, 12 + bob, 1, 2, skin);
+  r(20, 15 + bob, 2, 1, shade);
+  r(16, 16 + bob, 4, 1, shade);
+  if (profile.style === 0) {
+    r(14, 4 + bob, 8, 4, ink);
+    r(15, 4 + bob, 6, 3, col.main);
+    r(15, 4 + bob, 4, 1, col.light);
+    r(14, 7 + bob, 11, 2, ink);
+    r(15, 7 + bob, 10, 1, col.light);
+    r(19, 5 + bob, 2, 2, "#ede5c8");
+  } else if (profile.style === 1) {
+    r(15, 4 + bob, 6, 4, ink);
+    r(14, 6 + bob, 3, 4, "#4f3b35");
+    r(16, 4 + bob, 4, 2, "#775343");
+    r(15, 7 + bob, 8, 2, col.main);
+    r(16, 7 + bob, 6, 1, col.light);
+    r(13, 8 + bob, 2, 5, col.dark);
+  } else {
+    r(15, 3 + bob, 7, 4, ink);
+    r(16, 3 + bob, 5, 3, col.main);
+    r(16, 3 + bob, 4, 1, col.light);
+    r(12, 7 + bob, 13, 2, ink);
+    r(13, 7 + bob, 11, 1, col.light);
+    r(14, 9 + bob, 2, 6, "#5d4236");
+  }
+  // Rear arm stays behind torso; front arm uses an elbow and a small hand.
+  const limb = (sx, sy, ex, ey, hx, hy) => {
+    c.strokeStyle = ink;
+    c.lineWidth = 4;
+    c.lineJoin = "round";
+    c.lineCap = "round";
+    c.beginPath();
+    c.moveTo(sx, sy);
+    c.lineTo(ex, ey);
+    c.lineTo(hx, hy);
+    c.stroke();
+    c.strokeStyle = skin;
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(sx, sy + 2);
+    c.lineTo(ex, ey);
+    c.lineTo(hx, hy);
+    c.stroke();
+    r(hx - 1, hy - 1, 3, 3, skin);
+  };
+  limb(11, 23 + bob, 8, 28 + bob - walk, 10, 34 + bob - walk);
+  let elbow = [25, 27 + bob],
+    hand = [24, 34 + bob + walk];
+  if (pose === "throw") {
+    [elbow, hand] = [
+      [
+        [25, 18],
+        [22, 10],
+      ],
+      [
+        [27, 20],
+        [31, 17],
+      ],
+      [
+        [26, 26],
+        [29, 29],
+      ],
+    ][frame % 3];
+  }
+  if (pose === "victory") {
+    elbow = [25, 15];
+    hand = [24, 7];
+  }
+  if (pose === "jump") {
+    elbow = [26, 23];
+    hand = [28, 18];
+  }
+  if (pose === "hurt") {
+    elbow = [25, 26];
+    hand = [20, 29];
+  }
+  limb(23, 22 + bob, ...elbow, ...hand);
+  r(22, 21 + bob, 3, 4, col.main);
+  r(22, 21 + bob, 2, 2, col.light);
+  if (pose === "idle" || (pose === "throw" && frame === 0)) {
+    r(hand[0], hand[1], 3, 3, ink);
+    r(hand[0] + 1, hand[1], 2, 1, "#ee7269");
+    r(hand[0] + 1, hand[1] + 1, 2, 1, "#f6e6ce");
+  }
+  // Crisp native pixels; no softened polygon edges when enlarged.
+  const data = c.getImageData(0, 0, 36, 56);
+  for (let i = 3; i < data.data.length; i += 4)
+    data.data[i] = data.data[i] > 110 ? 255 : 0;
+  c.putImageData(data, 0, 0);
 }
 export function drawTrainer(
   c,
@@ -37,124 +240,36 @@ export function drawTrainer(
   active = false,
 ) {
   const profile = cleanProfile(p.profile, index),
-    col = palettes[profile.palette],
-    skin = skins[profile.skin],
-    ink = "#202738";
-  const walking = p.grounded && time - p.lastWalk < 0.13,
-    frame = walking ? Math.floor(p.walk * 1.3) % 4 : 0;
-  const jump = !p.grounded,
-    hurt = p.hurt > 0,
-    throwing = active && phase === "summon",
-    victory = phase === "over" && p.hp > 0;
-  const swing = walking ? [0, 2, 0, -2][frame] : 0,
-    bob = walking ? frame % 2 : Math.floor(time * 1.8) % 2;
+    walking = p.grounded && time - p.lastWalk < 0.13;
+  let pose =
+      p.hurt > 0 ? "hurt" : !p.grounded ? "jump" : walking ? "walk" : "idle",
+    frame = walking ? Math.floor(p.walk * 1.2) % 4 : 0;
+  if (active && phase === "summon") {
+    pose = "throw";
+    frame = phaseTime < 0.18 ? 0 : phaseTime < 0.42 ? 1 : 2;
+  }
+  if (phase === "over" && p.hp > 0) {
+    pose = "victory";
+    frame = 0;
+  }
+  const key = `${profile.palette}:${profile.skin}:${profile.style}:${pose}:${frame}`;
+  let sprite = frameCache.get(key);
+  if (!sprite) {
+    sprite = document.createElement("canvas");
+    sprite.width = 36;
+    sprite.height = 56;
+    paint(sprite.getContext("2d"), profile, pose, frame);
+    frameCache.set(key, sprite);
+  }
   c.save();
   c.translate(Math.round(p.x), Math.round(p.y + 19));
   c.scale(p.facing || 1, 1);
-  c.fillStyle = "#142b3d55";
+  c.fillStyle = "#18313d55";
   c.beginPath();
-  c.ellipse(0, 1, 17, 4, 0, 0, Math.PI * 2);
+  c.ellipse(0, 1, 16, 4, 0, 0, Math.PI * 2);
   c.fill();
-  c.scale(2, 2);
-  c.translate(-14, -34 + (jump ? -1 : 0));
-  const r = (x, y, w, h, color) =>
-    rect(c, x, y, w, h, hurt && Math.floor(time * 22) % 2 ? "#fff1ce" : color);
-  // Backpack, legs and individually articulated boots.
-  r(3, 16 + bob, 6, 11, ink);
-  r(4, 17 + bob, 4, 8, col.dark);
-  r(4, 18 + bob, 3, 2, col.main);
-  for (const [x, offset] of [
-    [9, swing],
-    [15, -swing],
-  ]) {
-    r(x, 25, 5, 7 + offset, ink);
-    r(x + 1, 26, 3, 5 + offset, "#45536b");
-    r(x + 2, 26, 2, 3 + offset, "#69778e");
-    r(x, 30 + offset, 7, 3, ink);
-    r(x + 1, 30 + offset, 5, 2, "#e6e9d5");
-    r(x + 1, 32 + offset, 6, 1, "#82959d");
-  }
-  r(8, 16 + bob, 12, 11, ink);
-  r(9, 17 + bob, 10, 8, col.main);
-  r(10, 17 + bob, 4, 7, col.light);
-  r(14, 17 + bob, 2, 8, "#f7ebcf");
-  r(9, 24 + bob, 10, 2, col.dark);
-  r(14, 25 + bob, 2, 1, "#f6c86d");
-  r(8, 17 + bob, 3, 4, col.dark);
-  r(9, 17 + bob, 2, 3, col.light);
-  // Head, hair, ear, face shading and two-pixel eye.
-  r(9, 6 + bob, 11, 11, ink);
-  r(10, 7 + bob, 9, 9, skin);
-  r(10, 7 + bob, 3, 6, "#664536");
-  r(10, 12 + bob, 2, 3, skin);
-  r(18, 10 + bob, 3, 4, skin);
-  r(16, 10 + bob, 2, 2, ink);
-  r(16, 10 + bob, 1, 1, "#fff5de");
-  r(17, 15 + bob, 2, 1, "#a36b5b");
-  r(12, 16 + bob, 5, 2, skin);
-  if (profile.style === 0) {
-    r(8, 3 + bob, 11, 5, ink);
-    r(9, 3 + bob, 9, 4, col.main);
-    r(11, 3 + bob, 5, 2, col.light);
-    r(8, 7 + bob, 14, 2, ink);
-    r(10, 7 + bob, 12, 1, col.light);
-    r(13, 5 + bob, 3, 2, "#f5e9c9");
-  } else if (profile.style === 1) {
-    r(9, 3 + bob, 8, 4, ink);
-    r(8, 5 + bob, 3, 4, "#443540");
-    r(11, 3 + bob, 6, 3, "#6a4a43");
-    r(9, 7 + bob, 11, 2, col.main);
-    r(10, 7 + bob, 9, 1, col.light);
-    r(7, 9 + bob, 3, 4, col.dark);
-  } else {
-    r(9, 3 + bob, 10, 4, ink);
-    r(10, 3 + bob, 8, 3, col.main);
-    r(10, 3 + bob, 6, 1, col.light);
-    r(6, 7 + bob, 17, 2, ink);
-    r(7, 7 + bob, 15, 1, col.light);
-    r(8, 9 + bob, 3, 6, "#624735");
-  }
-  // Back arm, forward arm: wind-up, release and follow-through are distinct poses.
-  r(6, 20 + bob - swing / 2, 3, 6, ink);
-  r(7, 20 + bob - swing / 2, 2, 4, skin);
-  let handX = 21,
-    handY = 24 + bob + swing;
-  if (victory) {
-    handX = 22;
-    handY = 9;
-  }
-  if (throwing) {
-    if (phaseTime < 0.18) {
-      handX = 14;
-      handY = 9;
-    } else if (phaseTime < 0.42) {
-      handX = 26;
-      handY = 14;
-    } else {
-      handX = 24;
-      handY = 20;
-    }
-  }
-  const shoulder = { x: 19, y: 19 + bob };
-  c.strokeStyle = ink;
-  c.lineWidth = 4;
-  c.lineCap = "square";
-  c.beginPath();
-  c.moveTo(shoulder.x, shoulder.y);
-  c.lineTo(handX, handY);
-  c.stroke();
-  c.strokeStyle = skin;
-  c.lineWidth = 2;
-  c.beginPath();
-  c.moveTo(shoulder.x, shoulder.y);
-  c.lineTo(handX, handY);
-  c.stroke();
-  r(handX - 1, handY - 1, 3, 3, skin);
-  if (active && (phase === "aim" || (throwing && phaseTime < 0.3))) {
-    r(handX, handY, 4, 4, ink);
-    r(handX + 1, handY, 2, 2, "#ed6b64");
-    r(handX + 1, handY + 2, 2, 1, "#fff1dc");
-  }
+  c.imageSmoothingEnabled = false;
+  c.drawImage(sprite, -29, -88, 59, 92);
   c.restore();
 }
 export function trainerPortrait(canvas, profile, index = 0) {
@@ -162,7 +277,7 @@ export function trainerPortrait(canvas, profile, index = 0) {
   c.clearRect(0, 0, canvas.width, canvas.height);
   c.save();
   c.translate(canvas.width / 2, canvas.height - 8);
-  c.scale(1.7, 1.7);
+  c.scale(1.25, 1.25);
   drawTrainer(
     c,
     { x: 0, y: -19, profile, facing: 1, grounded: true, lastWalk: -10, hp: 1 },

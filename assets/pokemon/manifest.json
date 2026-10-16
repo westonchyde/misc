@@ -144,6 +144,22 @@
       "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/445.gif",
       "sha256": "befc656ef0e04484da7f8a4554595bafbbc09ed5f7f16c16da32a5944fdf5223",
       "bytes": 51874
+    },
+    {
+      "id": "dugtrio",
+      "dex": 51,
+      "file": "assets/pokemon/dugtrio.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/51.gif",
+      "sha256": "fe0fb3b9860b9c3f515aaf187cf1336119881fefb844609af8d073b0317986fb",
+      "bytes": 14111
+    },
+    {
+      "id": "octillery",
+      "dex": 224,
+      "file": "assets/pokemon/octillery.gif",
+      "source": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-v/black-white/animated/224.gif",
+      "sha256": "b08edc49f62da50178f7b1485f02f844a00372bc35e78c72e2c9e0e9ce8c71ce",
+      "bytes": 8682
     }
   ]
 }

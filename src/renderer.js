@@ -1,4 +1,6 @@
-import { W, H, SEA, traceShot } from "./simulation.js";
+import { W, H, SEA, VIEW_W, SPAWNS, traceShot } from "./simulation.js";
+import { ISLAND_GAP } from "./world.js";
+import { drawPools } from "./flood.js";
 import { roster, maps, BALLISTIC, REMOTE } from "./content.js";
 import { oval, shape, line, ball, creature, trainer } from "./art.js";
 import { drawProjectile, drawMoveImpact, drawBeam } from "./effects.js";
@@ -60,6 +62,10 @@ function pine(c, x, y, s, color) {
     );
 }
 export function background(c, map = "highlands", time = 0) {
+  c.save();
+  c.scale(2, 960 / 680);
+  const W = 1280,
+    H = 680;
   const config = maps.find((m) => m.id === map) || maps[0];
   const g = c.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, config.sky[0]);
@@ -126,6 +132,7 @@ export function background(c, map = "highlands", time = 0) {
   mist.addColorStop(1, map === "islands" ? "#a6cdd020" : "#c2dec044");
   c.fillStyle = mist;
   c.fillRect(0, 400, W, 210);
+  c.restore();
 }
 export function drawMapThumbnail(c, id, seed = 42, profile, relief = "normal") {
   const t = new Terrain(seed, id, profile, relief),
@@ -136,8 +143,8 @@ export function drawMapThumbnail(c, id, seed = 42, profile, relief = "normal") {
   background(c, id);
   for (const [left, right] of t.profile === "islands"
     ? [
-        [28, 585],
-        [696, W - 28],
+        [28, ISLAND_GAP[0]],
+        [ISLAND_GAP[1] + 1, W - 28],
       ]
     : [[28, W - 28]]) {
     const edge = [];
@@ -152,7 +159,7 @@ export function drawMapThumbnail(c, id, seed = 42, profile, relief = "normal") {
   }
   c.fillStyle = "#548ba5";
   c.fillRect(0, SEA, W, H - SEA);
-  for (const [i, x] of [260, 1020].entries()) {
+  for (const [i, x] of SPAWNS.entries()) {
     const y = t.top(x);
     c.fillStyle = i ? "#9ee3ff" : "#ffbb8a";
     c.fillRect(x - 7, y - 30, 14, 25);
@@ -233,10 +240,13 @@ export function drawHero(c, time = 0) {
 export class Renderer {
   constructor(el, prefs) {
     this.canvas = el;
+    el.width = VIEW_W;
     this.c = el.getContext("2d");
     this.prefs = prefs;
     this.land = canvas(W, H);
     this.lc = this.land.getContext("2d");
+    this.baseLand = canvas(W, H);
+    this.baseLC = this.baseLand.getContext("2d");
     this.bg = canvas(W, H);
     this.bc = this.bg.getContext("2d");
     this.terrain = null;
@@ -251,13 +261,25 @@ export class Renderer {
     this.terrain = null;
     this.version = -1;
     this.view = null;
+    this.camera = { mode: "auto" };
+    this.lastImpact = null;
     this.effects = [];
     this.particles = [];
     this.trail = [];
     this.shake = 0;
   }
   event(e) {
-    if (["damage", "combo", "conduction"].includes(e.type))
+    if (e.type === "summon") this.lastImpact = null;
+    if (["landing", "impact"].includes(e.type))
+      this.lastImpact = { x: e.x, y: e.y };
+    if (e.type === "damage") {
+      const recent = this.effects.find(
+        (v) =>
+          v.type === "damage" && v.index === e.index && v.max - v.life < 0.1,
+      );
+      if (recent) recent.damage += e.damage;
+      else this.effects.push({ ...e, life: 0.85, max: 0.85 });
+    } else if (["combo", "conduction"].includes(e.type))
       this.effects.push({ ...e, life: 1.35, max: 1.35 });
     if (
       ["impact", "splash", "wall", "summon", "arrival", "burst"].includes(
@@ -306,16 +328,25 @@ export class Renderer {
   cacheTerrain(b) {
     if (this.terrain === b.terrain && this.version === b.terrain.version)
       return;
+    const same = this.terrain === b.terrain;
     this.terrain = b.terrain;
     this.version = b.terrain.version;
+    const dirty =
+      same && b.terrain.dirty
+        ? b.terrain.dirty
+        : { x0: 0, y0: 0, x1: W, y1: H };
+    const { x0, y0, x1, y1 } = dirty,
+      rw = x1 - x0,
+      rh = y1 - y0;
+    b.terrain.dirty = null;
     const config = maps.find((m) => m.id === b.options.map),
-      image = this.lc.createImageData(W, H),
+      image = this.baseLC.createImageData(rw, rh),
       data = image.data,
       cells = b.terrain.cells;
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++) {
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
         if (!cells[y * W + x]) continue;
-        const i = (y * W + x) * 4,
+        const i = ((y - y0) * rw + x - x0) * 4,
           exposed = y < 7 || !cells[(y - 7) * W + x],
           edge = y < 2 || !cells[(y - 2) * W + x];
         const nx = Math.floor(x / 3),
@@ -342,9 +373,14 @@ export class Renderer {
           );
         data[i + 3] = 255;
       }
-    this.lc.putImageData(image, 0, 0);
+    this.baseLC.putImageData(image, x0, y0);
+    // Recompose cheap surface decorations without clipping antialiased blades at strip edges.
+    this.lc.clearRect(0, 0, W, H);
+    this.lc.drawImage(this.baseLand, 0, 0);
     // Fine grass blades only where ground still exists, so craters never leave floating scenery.
     const c = this.lc;
+    c.save();
+
     for (let x = 35; x < W - 30; x += 9) {
       const y = b.terrain.top(x);
       if (y >= SEA) continue;
@@ -383,6 +419,7 @@ export class Renderer {
         c.restore();
       }
     }
+    this.lc.restore();
   }
   water(time, map) {
     const c = this.c,
@@ -414,7 +451,8 @@ export class Renderer {
       move = roster[selection.species].moves[selection.move];
     const o = originFor(p, selection.angle, move),
       v = angleVector(selection.angle),
-      len = 40 + selection.power * 0.38;
+      aimScale = 1 / (this.view?.zoom || 1),
+      len = (40 + selection.power * 0.38) * aimScale;
     c0.save();
     if (this.prefs.history !== false && b.lastShots[b.active]) {
       const last = b.lastShots[b.active],
@@ -442,20 +480,20 @@ export class Renderer {
     line(
       c0,
       [
-        [o.x - v.x * 8, o.y - v.y * 8],
+        [o.x - v.x * 8 * aimScale, o.y - v.y * 8 * aimScale],
         [o.x + v.x * len, o.y + v.y * len],
       ],
       "#183044",
-      7,
+      7 * aimScale,
     );
     line(
       c0,
       [
-        [o.x - v.x * 8, o.y - v.y * 8],
+        [o.x - v.x * 8 * aimScale, o.y - v.y * 8 * aimScale],
         [o.x + v.x * len, o.y + v.y * len],
       ],
       "#fff3b0",
-      3,
+      3 * aimScale,
     );
     const ex = o.x + v.x * len,
       ey = o.y + v.y * len;
@@ -463,24 +501,35 @@ export class Renderer {
       c0,
       [
         [ex, ey],
-        [ex - v.x * 13 - v.y * 6, ey - v.y * 13 + v.x * 6],
-        [ex - v.x * 13 + v.y * 6, ey - v.y * 13 - v.x * 6],
+        [
+          ex - v.x * 13 * aimScale - v.y * 6 * aimScale,
+          ey - v.y * 13 * aimScale + v.x * 6 * aimScale,
+        ],
+        [
+          ex - v.x * 13 * aimScale + v.y * 6 * aimScale,
+          ey - v.y * 13 * aimScale - v.x * 6 * aimScale,
+        ],
       ],
       "#fff3b0",
       "#183044",
-      1,
+      aimScale,
     );
-    const lx = Math.max(60, Math.min(W - 60, o.x + v.x * 45)),
-      ly = Math.max(24, o.y - 35);
+    const lx = Math.max(60, Math.min(W - 60, o.x + v.x * 45 * aimScale)),
+      ly = Math.max(24, o.y - 35 * aimScale);
     c0.fillStyle = "#172c40e6";
-    c0.fillRect(lx - 45, ly - 11, 90, 17);
+    c0.fillRect(
+      lx - 45 * aimScale,
+      ly - 11 * aimScale,
+      90 * aimScale,
+      17 * aimScale,
+    );
     c0.fillStyle = "#fff4c4";
-    c0.font = "bold 10px system-ui";
+    c0.font = `bold ${10 * aimScale}px system-ui`;
     c0.textAlign = "center";
     c0.fillText(
-      `${Math.round(selection.facing === 1 ? selection.angle : 180 - selection.angle)}° · ${move.kind === "beam" ? "BEAM" : Math.round(selection.power) + "%"}`,
+      `${Math.round(selection.facing === 1 ? selection.angle : 180 - selection.angle)}° · ${move.kind === "utility" ? "RESCUE" : move.directOnly ? "DIRECT" : move.kind === "beam" ? "BEAM" : Math.round(selection.power) + "%"}`,
       lx,
-      ly + 1,
+      ly + aimScale,
     );
     c0.restore();
     if (!this.prefs.guide) return;
@@ -610,7 +659,7 @@ export class Renderer {
         ball(
           c,
           p.x + dir * 18,
-          p.y - 16 - Math.sin(b.phaseTime * 7) * 8,
+          p.y - 44 - Math.sin(b.phaseTime * 7) * 8,
           1.1,
           b.phaseTime * 5,
         );
@@ -623,7 +672,7 @@ export class Renderer {
         ball(
           c,
           p.x + (s.x - p.x) * q,
-          p.y - 22 - Math.sin(q * Math.PI) * 50,
+          p.y - 44 - Math.sin(q * Math.PI) * 50,
           0.9,
           q * 6,
         );
@@ -701,13 +750,13 @@ export class Renderer {
       line(
         c,
         [
-          [p.x + dir * 14, p.y - 10],
+          [p.x + dir * 20, p.y - 44],
           [x, y - 40 * q],
         ],
         "#ffb9c2aa",
         3,
       );
-      ball(c, p.x + dir * 14, p.y - 10, 0.65);
+      ball(c, p.x + dir * 20, p.y - 44, 0.65);
     }
     oval(c, x, y + 2, 37 * scale, 7 * scale, "#142d3e33");
     creature(
@@ -785,45 +834,133 @@ export class Renderer {
     const v = this.view || { x: 0, y: 0, zoom: 1 };
     return { x: (x - v.x) / v.zoom, y: (y - v.y) / v.zoom };
   }
+  cameraMode(mode) {
+    this.camera = { mode, zoom: this.view?.zoom || 0.5, cx: null, cy: null };
+  }
+  zoomBy(factor, b) {
+    const current = this.view || { x: 0, y: 0, zoom: 0.5 };
+    const p = b.players[b.active];
+    const manual = this.camera?.mode === "manual";
+    this.camera = {
+      mode: "manual",
+      zoom: clamp(current.zoom * factor, 0.35, 1.5),
+      cx: manual ? this.camera.cx : p.x,
+      cy: manual ? this.camera.cy : p.y - 90,
+    };
+  }
+  panBy(dx, dy) {
+    const v = this.view || { x: 0, y: 0, zoom: 0.5 };
+    if (this.camera?.mode !== "manual")
+      this.camera = {
+        mode: "manual",
+        zoom: v.zoom,
+        cx: (VIEW_W / 2 - v.x) / v.zoom,
+        cy: (this.canvas.height / 2 - v.y) / v.zoom,
+      };
+    this.camera.cx -= dx / v.zoom;
+    this.camera.cy -= dy / v.zoom;
+  }
+  panTo(x, y) {
+    this.camera = {
+      mode: "manual",
+      zoom: Math.max(0.85, this.view?.zoom || 0.5),
+      cx: x,
+      cy: y - 70,
+    };
+  }
   fitCamera(b, selection, human) {
     const width = this.canvas.parentElement.clientWidth;
     const desired =
       innerWidth <= 800
-        ? H
+        ? 600
         : clamp(
             Math.round(
-              ((innerHeight - (document.fullscreenElement ? 400 : 475)) /
+              ((innerHeight - (document.fullscreenElement ? 390 : 475)) /
                 width) *
-                W,
+                VIEW_W,
             ),
-            260,
-            H,
+            300,
+            680,
           );
     if (this.canvas.height !== desired) this.canvas.height = desired;
-    const highest = Math.min(...b.terrain.heights);
-    const top = Math.max(
-      0,
-      Math.min(
-        highest - 145,
-        ...b.players.filter((p) => p.hp > 0).map((p) => p.y - 155),
-      ),
-    );
-    const zoom = clamp((desired - 20) / (SEA + 35 - top), 0.55, 1);
+    this.camera ||= { mode: "auto" };
+    const top = Math.max(0, Math.min(...b.terrain.heights) - 150),
+      overview = Math.min(VIEW_W / W, (desired - 15) / (SEA + 35 - top));
+    let zoom = overview,
+      cx = W / 2,
+      cy = (desired / 2 - (desired - (SEA + 35) * zoom)) / zoom;
+    if (this.camera.mode === "manual") {
+      zoom = this.camera.zoom;
+      cx = this.camera.cx;
+      cy = this.camera.cy;
+    } else if (
+      this.camera.mode === "auto" &&
+      !this.prefs.reduced &&
+      ["summon", "flight", "attack", "settle", "recall"].includes(b.phase)
+    ) {
+      const actor =
+        b.projectile ||
+        b.pools[0] ||
+        (b.phase === "settle" ? this.lastImpact : null) ||
+        (b.phase === "attack" && !b.attack?.remote && !b.attack?.rescue
+          ? b.players[1 - b.active]
+          : null) ||
+        b.summon ||
+        b.players[b.active];
+      zoom = b.phase === "attack" ? 1.05 : b.phase === "flight" ? 0.76 : 0.9;
+      cx = actor.x;
+      cy = actor.y - 95;
+    }
+    const half = VIEW_W / (2 * zoom);
+    cx = half >= W / 2 ? W / 2 : clamp(cx, half, W - half);
+    cy = Math.min(cy, SEA + 35 - desired / (2 * zoom));
     const target = {
-      x: (W - W * zoom) / 2,
-      y: desired - (SEA + 35) * zoom,
+      x: VIEW_W / 2 - cx * zoom,
+      y: desired / 2 - cy * zoom,
       zoom,
     };
-    if (
-      b.projectile &&
-      !this.prefs.reduced &&
-      b.projectile.y * zoom + target.y < 45
-    )
-      target.y = 45 - b.projectile.y * zoom;
     if (!this.view || this.prefs.reduced) this.view = target;
     else
       for (const key of ["x", "y", "zoom"])
-        this.view[key] += (target[key] - this.view[key]) * 0.14;
+        this.view[key] += (target[key] - this.view[key]) * 0.12;
+  }
+  minimap(b) {
+    const el = document.querySelector("#minimap");
+    if (!el || this.canvas.id !== "game") return;
+    if (
+      this.miniTime !== undefined &&
+      b.clock - this.miniTime < 0.1 &&
+      this.miniVersion === b.terrain.version
+    )
+      return;
+    this.miniTime = b.clock;
+    this.miniVersion = b.terrain.version;
+    const c = el.getContext("2d");
+    c.clearRect(0, 0, el.width, el.height);
+    c.fillStyle = "#41637b";
+    c.fillRect(0, 0, el.width, el.height);
+    c.save();
+    c.scale(el.width / W, el.height / H);
+    c.drawImage(this.land, 0, 0);
+    for (const [i, p] of b.players.entries()) {
+      if (p.hp <= 0) continue;
+      c.fillStyle = i ? "#8addff" : "#ffbb83";
+      c.fillRect(p.x - 16, p.y - 50, 32, 65);
+      if (i === b.active) {
+        c.fillStyle = "#edff9c";
+        c.fillRect(p.x - 22, p.y - 65, 44, 8);
+      }
+    }
+    const v = this.view;
+    c.strokeStyle = "#fff6c3";
+    c.lineWidth = 6;
+    c.strokeRect(
+      -v.x / v.zoom,
+      -v.y / v.zoom,
+      VIEW_W / v.zoom,
+      this.canvas.height / v.zoom,
+    );
+    c.restore();
   }
   draw(b, selection, human = true) {
     const c = this.c;
@@ -838,7 +975,7 @@ export class Renderer {
     sky.addColorStop(0, config.sky[0]);
     sky.addColorStop(1, config.sky[1]);
     c.fillStyle = sky;
-    c.fillRect(0, 0, W, this.canvas.height);
+    c.fillRect(0, 0, VIEW_W, this.canvas.height);
     // Extend edge columns of the landscape into the camera margins seamlessly.
     if (v.x > 0) {
       c.drawImage(this.bg, 0, 0, 1, H, 0, v.y, v.x + 1, H * v.zoom);
@@ -848,14 +985,14 @@ export class Renderer {
         0,
         1,
         H,
-        W - v.x - 1,
+        VIEW_W - v.x - 1,
         v.y,
         v.x + 1,
         H * v.zoom,
       );
     }
     c.fillStyle = "#477c9a";
-    c.fillRect(0, SEA * v.zoom + v.y, W, this.canvas.height);
+    c.fillRect(0, SEA * v.zoom + v.y, VIEW_W, this.canvas.height);
     c.save();
     c.translate(v.x, v.y);
     c.scale(v.zoom, v.zoom);
@@ -870,12 +1007,13 @@ export class Renderer {
     // Water is drawn over the terrain at the shoreline and is always a visible hazard.
     this.water(b.clock, this.map);
     drawHazards(c, b, this.prefs.reduced);
+    drawPools(c, b);
     if (human) this.preview(b, selection);
     for (let i = 0; i < 2; i++) {
       const p = b.players[i];
       if (p.hp <= 0) continue;
       trainer(c, p, i, b.clock, b.phase, b.phaseTime, i === b.active);
-      const labelY = p.y - 72;
+      const labelY = p.y - 96;
       c.font = "bold 10px system-ui";
       c.textAlign = "center";
       c.fillStyle = "#163144bb";
@@ -928,14 +1066,14 @@ export class Renderer {
       if (e.type === "conduction") drawConduction(c, e, q);
       else if (e.type === "damage" || e.type === "combo") {
         c.font =
-          e.type === "combo" ? "bold 12px system-ui" : "900 26px system-ui";
+          e.type === "combo" ? "bold 12px system-ui" : "900 23px system-ui";
         c.textAlign = "center";
         c.lineWidth = 4;
         c.strokeStyle = "#183346";
         const text = e.type === "combo" ? e.text : `−${e.damage}`;
-        c.strokeText(text, e.x, e.y - 25 - q * 35);
+        c.strokeText(text, e.x, e.y - 25 - q * 60);
         c.fillStyle = e.type === "combo" ? "#fff4a8" : "#fff5d6";
-        c.fillText(text, e.x, e.y - 25 - q * 35);
+        c.fillText(text, e.x, e.y - 25 - q * 60);
       } else if (e.visual) {
         const m = movesByVisual.get(e.visual);
         if (
@@ -994,5 +1132,30 @@ export class Renderer {
       c.restore();
     }
     c.restore();
+    this.minimap(b);
+    if (human && b.phase === "aim") {
+      const p = b.players[b.active],
+        sx = p.x * v.zoom + v.x;
+      if (sx < 20 || sx > VIEW_W - 20) {
+        const d = angleVector(selection.angle),
+          x = 58,
+          y = 55;
+        c.fillStyle = "#172d43e8";
+        c.fillRect(16, 15, 90, 82);
+        line(
+          c,
+          [
+            [x, y],
+            [x + d.x * 30, y + d.y * 30],
+          ],
+          "#fff3b0",
+          3,
+        );
+        c.fillStyle = "#fff3b0";
+        c.font = "bold 10px system-ui";
+        c.textAlign = "center";
+        c.fillText("AIM", x, 88);
+      }
+    }
   }
 }

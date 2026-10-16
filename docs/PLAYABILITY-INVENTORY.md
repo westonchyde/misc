@@ -34,3 +34,8 @@ Partially covered: sprites/attack poses are procedural fan art rather than produ
 ## Draft Edition 03 supersedes the original content limits
 
 The follow-up artillery revision expands the roster to 18 actual animated Pokémon sprites and 36 real moves; implements exclusive snake drafting and randomized teams; replaces close-range-only attacks with full-map arcs/relay summons; gives every move a distinct effect; and separates CPU difficulties through planning, drafting, tactics and resource choices. Editable arbitrary rosters, online play and persistent Pokémon remain future work. See [ARTILLERY-REVISION.md](ARTILLERY-REVISION.md) for the revised acceptance rules and [VALIDATION.md](VALIDATION.md) for executed evidence.
+
+
+## Edition 05 follow-up
+
+The [arsenal and scale revision](REVISION-05.md) supersedes the earlier roster/rules figures: 20 species, 40 moves, 350 standard HP and twice-width battlefields. It adds true precision, self-rescue, finite pit-filling water, mud cover and limited homing, plus measured CPU accuracy separation. See current [validation](VALIDATION.md) for evidence and remaining limits.

@@ -1,4 +1,5 @@
 import { traceShot, originFor, GRAVITY } from "./simulation.js";
+import { LAUNCH_BASE, LAUNCH_POWER } from "./world.js";
 import { BALLISTIC } from "./content.js";
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // Pointer assist searches legal arcs to the chosen landing area; manual controls remain independent.
@@ -8,7 +9,7 @@ export function aimAt(battle, move, x, y, owner = battle.active) {
     origin = originFor(p, right ? 0 : 180, move),
     dx = Math.abs(x - origin.x),
     dy = y - origin.y;
-  if (!BALLISTIC.has(move.kind)) {
+  if (!BALLISTIC.has(move.kind) || move.velocity) {
     let angle = (Math.atan2(origin.y - y, x - origin.x) * 180) / Math.PI;
     if (angle < -90) angle += 360;
     return { angle: clamp(angle, -65, 245), power: 55 };
@@ -25,9 +26,9 @@ export function aimAt(battle, move, x, y, owner = battle.active) {
       denominator = 2 * Math.cos(a) ** 2 * (dy + dx * Math.tan(a));
     if (denominator <= 0) continue;
     const velocity = Math.sqrt(
-        (GRAVITY * (move.gravityScale || 1) * dx * dx) / denominator,
+        (GRAVITY * (move.gravityScale ?? 1) * dx * dx) / denominator,
       ),
-      power = (velocity - 260) / 5.6;
+      power = (velocity - LAUNCH_BASE) / LAUNCH_POWER;
     if (power >= 18 && power <= 103)
       score(right ? elevation : 180 - elevation, clamp(power, 20, 100));
   }

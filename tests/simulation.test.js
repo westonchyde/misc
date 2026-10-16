@@ -49,12 +49,12 @@ function aimed(b, s, m) {
   return p;
 }
 
-test("18 Pokémon, 36 unique canonical move IDs and distinct visual definitions", () => {
-  assert.equal(roster.length, 18);
-  assert.equal(validateContent(), 36);
+test("20 Pokémon, 40 unique canonical move IDs and distinct visual definitions", () => {
+  assert.equal(roster.length, 20);
+  assert.equal(validateContent(), 40);
   assert.equal(
     new Set(roster.flatMap((s) => s.moves.map((m) => m.visual))).size,
-    36,
+    40,
   );
   assert.equal(
     roster.flatMap((s) => s.moves).filter((m) => m.kind === "beam").length,
@@ -68,11 +68,11 @@ test("18 Pokémon, 36 unique canonical move IDs and distinct visual definitions"
       ),
   );
 });
-test("all 18 pinned game sprites match their source checksums", () => {
+test("all 20 pinned game sprites match their source checksums", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("../assets/pokemon/manifest.json", import.meta.url)),
   );
-  assert.equal(manifest.assets.length, 18);
+  assert.equal(manifest.assets.length, 20);
   for (const a of manifest.assets) {
     const bytes = readFileSync(new URL(`../${a.file}`, import.meta.url));
     assert.equal(bytes.subarray(0, 3).toString(), "GIF");
@@ -344,18 +344,33 @@ test("timer, pause-independent model and practice handoff rules", () => {
 });
 for (const map of maps)
   for (const owner of [0, 1])
-    test(`every move can damage the opponent from spawn: ${map.name}, player ${owner + 1}`, () => {
-      for (let s = 0; s < 18; s++)
+    test(`every damaging attack or specialized utility resolves from spawn: ${map.name}, player ${owner + 1}`, () => {
+      for (let s = 0; s < roster.length; s++)
         for (let m = 0; m < 2; m++) {
           const b = create({ map: map.id, difficulty: "hard" });
           settle(b);
           b.active = owner;
           const p = aimed(b, s, m);
           finish(b);
-          assert.ok(
-            b.players[1 - owner].hp < RULES.hp,
-            `${roster[s].name}: ${roster[s].moves[m].name} cannot reach; angle ${p.angle}, power ${p.power}`,
-          );
+          const move = roster[s].moves[m];
+          if (move.kind === "utility") {
+            assert.equal(b.players[1 - owner].hp, RULES.hp);
+            assert.ok(b.terrain.version > 0);
+          } else if (move.behavior === "flood") {
+            const start = b.events.find((e) => e.type === "flood-start"),
+              end = b.events.find((e) => e.type === "flood-end");
+            assert.ok(start && end);
+            assert.ok(
+              Math.abs(start.x - b.players[1 - owner].x) < 160,
+              "water must reach the rival area",
+            );
+            assert.equal(end.pulses, 8);
+            assert.equal(b.pools.length, 0);
+          } else
+            assert.ok(
+              b.players[1 - owner].hp < RULES.hp,
+              `${roster[s].name}: ${roster[s].moves[m].name} cannot reach; angle ${p.angle}, power ${p.power}`,
+            );
           for (const actor of b.players)
             if (actor.hp > 0)
               assert.ok(!b.collides(actor.x, actor.y), roster[s].moves[m].name);
@@ -377,6 +392,8 @@ test("difficulties change search effort, tactics, conservation and movement", ()
   assert.equal(results[2].diagnostics.conserve, true);
   const b = create({ difficulty: "hard" });
   b.players[0].x = 80;
+  b.players[0].y = b.terrain.top(80) - 19;
+  settle(b);
   assert.equal(movementPlan(b, { score: 30 }).reason, "escape sea edge");
   b.options.difficulty = "easy";
   assert.equal(movementPlan(b, { score: 0 }), null);

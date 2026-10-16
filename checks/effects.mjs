@@ -46,10 +46,10 @@ try {
     }));
     const board = document.createElement("canvas");
     board.width = 1440;
-    board.height = 1440;
+    board.height = 1680;
     const c = board.getContext("2d");
     c.fillStyle = "#132633";
-    c.fillRect(0, 0, 1440, 1440);
+    c.fillRect(0, 0, 1440, 1680);
     const hashes = [];
     roster.forEach((s, si) =>
       s.moves.forEach((m, mi) => {
@@ -84,22 +84,22 @@ try {
     document.body.append(board);
     document.body.style.margin = "0";
     board.style.width = "1440px";
-    board.style.height = "1440px";
+    board.style.height = "1680px";
     return { spriteFrames, hashes };
   });
-  assert.equal(result.spriteFrames.length, 18);
+  assert.equal(result.spriteFrames.length, 20);
   assert.ok(
     result.spriteFrames.every((s) => s.count > 1 && s.distinct > 1),
     JSON.stringify(result.spriteFrames),
   );
-  assert.equal(new Set(result.hashes.map((h) => h.hash)).size, 36);
+  assert.equal(new Set(result.hashes.map((h) => h.hash)).size, 40);
   await page.screenshot({
     path: "/tmp/battlefront-move-catalog.png",
     fullPage: true,
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Effect catalog passed: 36 distinct rendered move effects; all 18 original sprites have multiple distinct decoded animation frames.",
+    "Effect catalog passed: 40 distinct rendered move effects; all 20 original sprites have multiple distinct decoded animation frames.",
   );
 } finally {
   await browser.close();

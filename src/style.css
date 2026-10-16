@@ -2186,3 +2186,69 @@ body.in-battle .site-header {
   border: 1px solid #ffffff22;
   border-radius: 5px;
 }
+.camera-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 4px;
+  z-index: 3;
+  background: #153246cc;
+  padding: 4px;
+  border-radius: 6px;
+}
+.camera-controls button {
+  font-size: 10px;
+  padding: 5px 9px;
+  border-color: #ffffff22;
+  background: #193447bb;
+  color: #ecf1db;
+}
+.camera-controls button:first-child,
+.camera-controls button:nth-child(2) {
+  font-size: 15px;
+  line-height: 13px;
+  min-width: 27px;
+}
+#minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 13px;
+  width: 190px;
+  height: 72px;
+  border: 1px solid #c3e3d377;
+  border-radius: 5px;
+  z-index: 3;
+  cursor: crosshair;
+  background: #2e546b;
+  opacity: 0.94;
+}
+.arena-corners span:last-child {
+  display: none;
+}
+@media (max-width: 600px) {
+  .camera-controls {
+    top: 7px;
+    left: 7px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .camera-controls button {
+    font-size: 8px;
+    padding: 4px 6px;
+  }
+  #minimap {
+    width: 120px;
+    height: 45px;
+    right: 7px;
+    bottom: 18px;
+  }
+  .camera-controls button:first-child,
+  .camera-controls button:nth-child(2) {
+    font-size: 12px;
+    min-width: 23px;
+  }
+  .partner strong {
+    font-size: 8px;
+  }
+}

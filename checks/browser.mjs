@@ -52,9 +52,9 @@ try {
     null,
     { timeout: 30000 },
   );
-  assert.equal((await state()).assets.loaded, 18);
+  assert.equal((await state()).assets.loaded, 20);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-menu.png",
+    path: "/tmp/battlefront-v5-menu.png",
     fullPage: true,
   });
   await page.locator("#settings").click();
@@ -73,10 +73,10 @@ try {
   await page.locator(".mode-card:has(input[value=hotseat])").click();
   await page.locator("#timer-option").uncheck();
   await page.locator("#start").click();
-  assert.equal(await page.locator("#draft-pool button").count(), 18);
+  assert.equal(await page.locator("#draft-pool button").count(), 20);
   assert.ok(await page.locator("#draft-begin").isDisabled());
   await page.screenshot({
-    path: "/tmp/battlefront-v4-draft.png",
+    path: "/tmp/battlefront-v5-draft.png",
     fullPage: true,
   });
   for (let index = 0; index < 12; index++) {
@@ -111,7 +111,7 @@ try {
       .isVisible(),
   );
   await page.screenshot({
-    path: "/tmp/battlefront-v4-battle.png",
+    path: "/tmp/battlefront-v5-battle.png",
     fullPage: true,
   });
   await page.locator("#angle").fill("-20");
@@ -124,7 +124,7 @@ try {
   assert.ok((await state()).positions[0].x > x);
   await page.locator("#jump").click();
   await page.waitForTimeout(1200);
-  assert.ok((await state()).budget < 125);
+  assert.ok((await state()).budget < 180);
   await page.locator("#pause").click();
   const snapshot = await state();
   await page.waitForTimeout(400);
@@ -143,7 +143,7 @@ try {
   );
   await page.waitForTimeout(450);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-relay.png",
+    path: "/tmp/battlefront-v5-relay.png",
     fullPage: true,
   });
   await ready(2);
@@ -199,7 +199,7 @@ try {
   assert.equal((await state()).winner, 1);
   await page.locator("#result").waitFor({ state: "visible" });
   await page.screenshot({
-    path: "/tmp/battlefront-v4-results.png",
+    path: "/tmp/battlefront-v5-results.png",
     fullPage: true,
   });
   const oldTeams = (await state()).teams,
@@ -225,12 +225,12 @@ try {
     ),
   );
   await page.screenshot({
-    path: "/tmp/battlefront-v4-mobile.png",
+    path: "/tmp/battlefront-v5-mobile.png",
     fullPage: true,
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Browser suite passed: 18 real animated sprites, exclusive snake draft, CPU picks, random rerolls, drafted ownership, long-range relay and projectile hits, ammo, movement/aiming, pause, solo AI victory, rematch, preferences, mobile overflow, no page errors.",
+    "Browser suite passed: 20 real animated sprites, exclusive snake draft, CPU picks, random rerolls, drafted ownership, long-range relay and projectile hits, ammo, movement/aiming, pause, solo AI victory, rematch, preferences, mobile overflow, no page errors.",
   );
 } finally {
   await browser.close();

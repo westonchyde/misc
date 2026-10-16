@@ -1,3 +1,4 @@
+import { SEA } from "./world.js";
 // Layered, textured material effects. Presentation never changes combat state.
 import { line, shape } from "./art.js";
 const snap = (v) => Math.round(v / 2) * 2;
@@ -51,7 +52,7 @@ export function drawHazards(c, b, reduced = false) {
       right = h.x + h.radius;
     if (h.type === "water") {
       for (let x = left; x < right; x += 4) {
-        const y = Math.min(630, b.terrain.top(x, Math.max(0, h.y - 28)));
+        const y = Math.min(SEA - 2, b.terrain.top(x, Math.max(0, h.y - 28)));
         if (Math.abs(y - h.y) > 25) continue;
         rect(c, x, y - 5, 4, 5, "#3587b5b0");
         rect(c, x, y - 5, 4, 2, "#a2e8eb");
@@ -169,6 +170,15 @@ export function drawSignature(c, b, reduced = false) {
   const time = reduced ? 0 : b.clock;
   const a = b.attack,
     m = b.currentMove;
+  if (a?.rescue && b.phase === "attack") {
+    for (let i = 0; i < 16; i++) {
+      const x = b.players[b.active].x + Math.sin(i * 3) * 60,
+        y =
+          b.players[b.active].y + 18 - Math.abs(Math.sin(i + b.clock * 8)) * 18;
+      rect(c, x, y, 3 + (i % 3), 3, i % 2 ? "#d3b27b" : "#8b6c52");
+    }
+    return;
+  }
   if (!a?.remote || b.phase !== "attack") return;
   const q = a.progress,
     dir = b.players[b.active].facing,
@@ -308,6 +318,24 @@ export function drawMaterialImpact(c, m, x, y, r, t) {
 }
 export function drawFlightTexture(c, m, p, time) {
   if (m.behavior === "stream") return;
+  if (m.behavior === "hydro-rocket") {
+    const points = (p.history || []).slice(-15);
+    if (points.length > 1) {
+      line(
+        c,
+        points.map((v) => [v.x, v.y]),
+        "#2384bdbb",
+        16,
+      );
+      line(
+        c,
+        points.map((v) => [v.x, v.y]),
+        "#b6f4ed",
+        6,
+      );
+    }
+    return;
+  }
   const path = p.history || [],
     burn = m.effect === "burn" || m.behavior === "meteor-fragment",
     ghost = m.kind === "phase",

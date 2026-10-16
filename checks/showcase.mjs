@@ -22,10 +22,13 @@ try {
     document.body.append(wrap);
     const records = [];
     for (const [si, mi, frame] of [
-      [0, 0, "flame"],
       [1, 0, "water"],
-      [3, 0, "rock"],
-      [17, 0, "dig"],
+      [1, 1, "flood"],
+      [18, 0, "rescue"],
+      [18, 1, "mud"],
+      [19, 0, "sniper"],
+      [14, 0, "stars"],
+      [3, 1, "earthquake"],
     ]) {
       const header = document.createElement("h2");
       header.textContent = roster[si].moves[mi].name;
@@ -42,10 +45,14 @@ try {
         landscape: "rolling",
         timer: false,
         mode: "practice",
-        hp: 240,
+        hp: 500,
         teams: [[si], [1]],
       });
-      for (let i = 0; i < 60; i++) b.step();
+      if (frame === "flood" || frame === "rescue") {
+        const p = b.players[frame === "rescue" ? 0 : 1];
+        b.terrain.circle(p.x, p.y + 60, 120);
+      }
+      for (let i = 0; i < 180; i++) b.step();
       b.wind = 0;
       const aim = aimAt(
         b,
@@ -64,6 +71,25 @@ try {
         b.step();
         for (const e of b.events.splice(0)) r.event(e);
         r.tick(1 / 60);
+        if (
+          (frame === "flood" && b.pools[0]?.pulses >= 2) ||
+          (frame === "rescue" &&
+            b.phase === "attack" &&
+            b.attack.progress > 0.52) ||
+          (frame === "mud" && b.phase === "settle") ||
+          (frame === "sniper" &&
+            b.phase === "flight" &&
+            b.projectiles.some((p) => p.x > 950 && p.x < 1300)) ||
+          (frame === "stars" &&
+            b.phase === "flight" &&
+            b.projectiles.some((p) => p.x > 1600)) ||
+          (frame === "earthquake" &&
+            b.phase === "attack" &&
+            b.attack.progress > 0.55)
+        ) {
+          captured = true;
+          break;
+        }
         if (
           frame === "flame" &&
           b.phase === "attack" &&
@@ -118,7 +144,7 @@ try {
     return records;
   });
   await p.screenshot({
-    path: "/tmp/battlefront-v4-attack-showcase.png",
+    path: "/tmp/battlefront-v5-attack-showcase.png",
     fullPage: true,
   });
   console.log(JSON.stringify(result));

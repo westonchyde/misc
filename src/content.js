@@ -21,7 +21,7 @@ const attack = (
   visual: id,
   cooldown: 0,
   ammo: 3,
-  range: 1600,
+  range: 3400,
   ...extra,
 });
 const species = (id, dex, name, element, color, role, moves) => ({
@@ -572,6 +572,111 @@ export const roster = [
     ],
   ),
 ];
+roster.push(
+  species(
+    "dugtrio",
+    51,
+    "Dugtrio",
+    "GROUND",
+    "#d7b58c",
+    "Rescue excavation & muddy cover",
+    [
+      attack(
+        "dugtrio-dig",
+        "Dig",
+        "utility",
+        0,
+        55,
+        0,
+        null,
+        "Dig an escape tunnel and emerge 220 px in the facing direction. No damage; spends your attack.",
+        {
+          ammo: 2,
+          visual: "rescue-dig",
+          behavior: "rescue",
+          family: "Self rescue",
+          terrain: "Escape tunnel · no enemy damage",
+          counter:
+            "Use when trapped. Choose an exit direction; this costs a turn.",
+        },
+      ),
+      attack(
+        "mud-bomb",
+        "Mud Bomb",
+        "lob",
+        18,
+        42,
+        45,
+        "mud",
+        "A weak mud hit piles real earth beside the impact. Mud slows the rival; the mounds can protect either player.",
+        {
+          visual: "mud-bomb",
+          behavior: "mud",
+          family: "Terrain creation",
+          terrain: "Two mud banks + 30% movement penalty",
+          counter:
+            "Weak damage. Jump or dig out; newly created cover can also protect its target.",
+          ammo: 4,
+        },
+      ),
+    ],
+  ),
+  species(
+    "octillery",
+    224,
+    "Octillery",
+    "WATER",
+    "#e4a697",
+    "Precision sniper & small reliable shots",
+    [
+      attack(
+        "octazooka",
+        "Octazooka",
+        "precision",
+        100,
+        3,
+        85,
+        null,
+        "A very fast ink shot. Direct body hit: 100 damage. A near miss deals zero; solid cover stops it.",
+        {
+          visual: "octazooka",
+          behavior: "sniper",
+          family: "Direct-hit sniper",
+          terrain: "Small impact chip · stops at cover",
+          counter:
+            "No splash damage. Requires a clear firing line and precise aim.",
+          directOnly: true,
+          velocity: 1900,
+          gravityScale: 0.035,
+          windScale: 0,
+          ammo: 2,
+          cooldown: 1,
+        },
+      ),
+      attack(
+        "bubble-beam",
+        "Bubble Beam",
+        "salvo",
+        6,
+        26,
+        20,
+        "wet",
+        "Five forgiving bubbles: only 6 damage each, but wide coverage and wetness. A weak, plentiful fallback.",
+        {
+          visual: "bubble-beam",
+          behavior: "bubbles",
+          family: "Small reliable barrage",
+          terrain: "Tiny chips · wets targets",
+          counter:
+            "Only 30 base damage if all five land; useful when stronger moves are unavailable.",
+          count: 5,
+          spread: 1.1,
+          ammo: 5,
+        },
+      ),
+    ],
+  ),
+);
 const elementColors = {
   FIRE: "#ff9b50",
   WATER: "#78d4f4",
@@ -713,6 +818,8 @@ const mechanics = {
   },
 };
 const anchors = {
+  dugtrio: [55, -30],
+  octillery: [66, -44],
   charizard: [64, -55],
   blastoise: [44, -68],
   pikachu: [56, -40],
@@ -734,6 +841,12 @@ const anchors = {
 };
 for (const s of roster)
   for (const m of s.moves) {
+    const authored = {
+      behavior: m.behavior,
+      family: m.family,
+      terrain: m.terrain,
+      counter: m.counter,
+    };
     Object.assign(
       m,
       {
@@ -754,9 +867,147 @@ for (const s of roster)
       },
       mechanics[m.id],
     );
-    m.color = elementColors[s.element];
+    for (const [k, v] of Object.entries(authored))
+      if (v !== undefined) m[k] = v;
+    m.color = s.id === "dugtrio" ? "#c4a071" : elementColors[s.element];
   }
 
+const balance = {
+  flamethrower: { damage: 32, force: 95 },
+  "fire-blast": {
+    damage: 78,
+    radius: 70,
+    force: 150,
+    ammo: 2,
+    cooldown: 1,
+    tier: "HEAVY",
+  },
+  "hydro-pump": {
+    damage: 64,
+    radius: 38,
+    force: 245,
+    behavior: "hydro-rocket",
+    family: "Water rocket",
+    terrainRadius: 24,
+    terrain: "Focused crater · strong horizontal shove",
+    description:
+      "One high-pressure water rocket. A tight 64-damage blast with directional knockback; it does not fill a pit.",
+    counter:
+      "Narrower than Water Spout. Aim for a direct impact; avoid sea edges.",
+    gravityScale: 1,
+    ammo: 3,
+    tier: "HEAVY",
+  },
+  "water-pulse": {
+    id: "water-spout",
+    name: "Water Spout",
+    visual: "water-spout",
+    damage: 0,
+    radius: 130,
+    force: 0,
+    effect: "wet",
+    behavior: "flood",
+    family: "Pit-filling water",
+    pattern: null,
+    terrainRadius: 0,
+    ammo: 2,
+    cooldown: 1,
+    waterVolume: 640,
+    description:
+      "Pour a reservoir of water into the landing area. It fills low ground and deals repeated 10-damage drowning ticks before draining.",
+    terrain: "Real pool · up to 80 damage in 10-point ticks",
+    counter:
+      "Little damage on open slopes; powerful in deep pits. Both trainers can drown.",
+    tier: "SPECIAL",
+  },
+  thunderbolt: { damage: 48 },
+  "electro-ball": { damage: 36 },
+  "rock-blast": { damage: 16 },
+  earthquake: {
+    damage: 18,
+    force: 70,
+    radius: 125,
+    terrainRadius: 180,
+    family: "Mountain mover",
+    terrain: "Huge excavation · only 18 base damage",
+    description:
+      "Trade damage for excavation. Golem removes a huge section of hillside and ruptures nearby ground.",
+    counter: "Only 18 damage. Use to open a firing line or remove support.",
+    tier: "UTILITY",
+  },
+  "shadow-ball": { damage: 44 },
+  "sludge-bomb": { damage: 28 },
+  "body-slam": { damage: 58, force: 220 },
+  "hyper-beam": { damage: 90, radius: 8, force: 100, ammo: 1, tier: "HEAVY" },
+  "seed-bomb": { damage: 45 },
+  "solar-beam": { damage: 75, radius: 5, ammo: 2 },
+  psybeam: { damage: 24, radius: 32, ammo: 5, tier: "LIGHT" },
+  psychic: { damage: 32, force: 200 },
+  "dynamic-punch": { damage: 55 },
+  "focus-blast": { damage: 85, radius: 64, ammo: 2, tier: "HEAVY" },
+  "aqua-tail": { damage: 38 },
+  "dragon-rage": { damage: 26, radius: 34, ammo: 5, tier: "LIGHT" },
+  "ice-shard": { damage: 9, ammo: 4 },
+  "ice-beam": { damage: 34, radius: 12 },
+  hurricane: { damage: 22, force: 75 },
+  "draco-meteor": { damage: 108, radius: 50, ammo: 1, tier: "HEAVY" },
+  "stone-edge": { damage: 36 },
+  crunch: { damage: 62 },
+  "bullet-punch": { damage: 4, ammo: 6, tier: "LIGHT" },
+  "x-scissor": { damage: 54 },
+  swift: {
+    damage: 6,
+    homing: { range: 350, turn: 1.15 },
+    family: "Guided stars",
+    terrain: "Limited steering · only 30 total base damage",
+    description:
+      "Five weak stars steer toward a nearby rival during their final approach. They cannot pass through cover.",
+    counter: "Steering only works within 350 px; a bad launch still misses.",
+    tier: "LIGHT",
+  },
+  psyshock: { damage: 42 },
+  snarl: { damage: 14, ammo: 5, tier: "LIGHT" },
+  "dark-pulse": { damage: 40 },
+  "lava-plume": { damage: 35 },
+  eruption: { damage: 82, ammo: 1, tier: "HEAVY" },
+  dig: {
+    damage: 50,
+    seekRange: 280,
+    family: "Burrowing seeker",
+    description:
+      "Land Garchomp within 280 px of the rival. It tracks along an underground tunnel before surfacing; distant landings do not home.",
+    counter:
+      "Must land nearby. Excavates support but has limited underground pursuit.",
+  },
+  "dragon-rush": { damage: 68 },
+};
+for (const s of roster)
+  for (const m of s.moves) {
+    const change = balance[m.id];
+    if (change) Object.assign(m, change);
+    m.tier ||=
+      m.kind === "utility" || m.damage === 0
+        ? "SPECIAL"
+        : m.damage * (m.count || 1) >= 70
+          ? "HEAVY"
+          : m.damage * (m.count || 1) <= 30
+            ? "LIGHT"
+            : "STANDARD";
+    m.damageText =
+      m.kind === "utility"
+        ? "0 · RESCUE"
+        : m.behavior === "flood"
+          ? "10 × UP TO 8"
+          : m.directOnly
+            ? "100 · DIRECT ONLY"
+            : m.count
+              ? `${m.damage} × ${m.count}`
+              : String(m.damage);
+    m.range = 3400;
+  }
+export const damageMoves = roster
+  .flatMap((s) => s.moves)
+  .filter((m) => m.kind !== "utility");
 export const BALLISTIC = new Set([
   "lob",
   "phase",
@@ -764,6 +1015,7 @@ export const BALLISTIC = new Set([
   "salvo",
   "cluster",
   "burrow",
+  "precision",
 ]);
 export const REMOTE = new Set(["relay", "burrow"]);
 export const difficultyProfiles = {
@@ -772,8 +1024,8 @@ export const difficultyProfiles = {
     angleStep: 10,
     powerStep: 12,
     refine: 0,
-    aimError: 5,
-    powerError: 5,
+    aimError: 9,
+    powerError: 8,
     choices: 4,
     statusWeight: 0,
     terrainWeight: 0,
@@ -781,15 +1033,15 @@ export const difficultyProfiles = {
     movement: false,
     conserve: false,
     description:
-      "Coarse aim, simple damage choices, little repositioning. Does not plan status combinations.",
+      "Estimates distance with large errors, ignores wind and picks simple attacks. Expect genuine misses; no trajectory search or damage forecasting.",
   },
   normal: {
     name: "Trainer",
     angleStep: 5,
     powerStep: 6,
     refine: 2,
-    aimError: 1.8,
-    powerError: 2,
+    aimError: 3.6,
+    powerError: 3.6,
     choices: 2,
     statusWeight: 1,
     terrainWeight: 0.6,
@@ -860,9 +1112,10 @@ export function validateContent() {
         ids.has(m.id) ||
         !m.name ||
         !m.visual ||
-        ![...BALLISTIC, "beam"].includes(m.kind) ||
+        ![...BALLISTIC, "beam", "utility"].includes(m.kind) ||
         !Number.isFinite(m.damage) ||
-        m.damage <= 0 ||
+        m.damage < 0 ||
+        (m.damage === 0 && !["flood", "rescue"].includes(m.behavior)) ||
         m.radius <= 0 ||
         m.ammo < 1 ||
         m.cooldown < 0 ||

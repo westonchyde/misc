@@ -31,7 +31,7 @@ try {
   );
   assert.equal(
     (await page.evaluate(() => window.battlefront.state)).assets.loaded,
-    18,
+    20,
   );
   await page.locator("#aim-style").selectOption("assisted");
   await page.locator(".mode-card:has(input[value=practice])").click();
@@ -65,11 +65,11 @@ try {
   const fire = await page.locator("#fire").boundingBox();
   assert.ok(fire.y + fire.height <= 900);
   await page.screenshot({
-    path: "/tmp/battlefront-v4-portable.png",
+    path: "/tmp/battlefront-v5-portable.png",
     fullPage: true,
   });
   console.log(
-    "Portable build passed: all 18 animated sprites decoded offline; draft, aimed long-range attack, damage, terrain edit and turn handoff; zero HTTP requests and no runtime errors.",
+    "Portable build passed: all 20 animated sprites decoded offline; draft, aimed long-range attack, damage, terrain edit and turn handoff; zero HTTP requests and no runtime errors.",
   );
 } finally {
   await browser.close();

@@ -1,3 +1,4 @@
+import { W, SPAWNS } from "./world.js";
 // Gameplay silhouettes are independent from scenery. Heights are authoritative.
 export const landscapes = [
   {
@@ -54,12 +55,12 @@ export function makeHeights(
   seed,
   profile = "rolling",
   relief = "normal",
-  width = 1280,
+  width = W,
 ) {
   const recipe = recipes[profile] || recipes.rolling;
   const dramatic = relief === "dramatic" ? 1.28 : 1;
   const knots = recipe.map(
-    (v, i) => 420 + (v - 420) * dramatic + (noise(seed, i) - 0.5) * 42,
+    (v, i) => 590 + (v - 420) * dramatic * 1.45 + (noise(seed, i) - 0.5) * 56,
   );
   const heights = new Int16Array(width);
   for (let x = 0; x < width; x++) {
@@ -69,15 +70,15 @@ export function makeHeights(
     const q = t * t * (3 - 2 * t);
     const texture = 6 * Math.sin(x / (24 + noise(seed, 25) * 30) + (seed % 11));
     heights[x] = Math.max(
-      145,
+      210,
       Math.min(
-        555,
+        785,
         Math.round(knots[i] * (1 - q) + knots[i + 1] * q + texture),
       ),
     );
   }
   // Safe footing, without giving both players identical terrain.
-  for (const x of [260, 1020]) {
+  for (const x of SPAWNS) {
     const shelf = heights[x];
     for (let i = x - 65; i <= x + 65; i++) {
       const d = Math.abs(i - x),

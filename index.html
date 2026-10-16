@@ -11,7 +11,7 @@
       <a href="#" id="brand" aria-label="Battlefront home"
         ><span class="brand-ball">◒</span
         ><span>BATTLEFRONT<small>POKÉMON · TRAINER ARENA</small></span></a
-      ><span class="version">FAN EDITION <i>04</i></span>
+      ><span class="version">FAN EDITION <i>05</i></span>
       <nav>
         <button id="help" class="quiet">? <span>Field guide</span></button
         ><button id="settings" class="quiet">⚙ <span>Settings</span></button
@@ -34,7 +34,7 @@
               </p>
               <h1>Small arena.<br /><em>Big rivalries.</em></h1>
               <p>
-                18 Pokémon. 36 moves. Draft your six.<br />A turn-based
+                20 Pokémon. 40 moves. Draft your six.<br />A turn-based
                 artillery adventure.
               </p>
             </div>
@@ -132,9 +132,9 @@
               <div class="setup-options">
                 <label
                   >Match length<select id="match-hp">
-                    <option value="180">Quick · 180 HP</option>
-                    <option value="240" selected>Standard · 240 HP</option>
-                    <option value="300">Endurance · 300 HP</option>
+                    <option value="250">Skirmish · 250 HP</option>
+                    <option value="350" selected>Standard · 350 HP</option>
+                    <option value="500">Endurance · 500 HP</option>
                   </select></label
                 ><label
                   >Opening turn<select id="first-player">
@@ -164,7 +164,7 @@
                 teams</label
               >
               <p class="muted">
-                18 Pokémon in the pool. Six exclusive picks each. Two real moves
+                20 Pokémon in the pool. Six exclusive picks each. Two real moves
                 per partner.
               </p>
             </fieldset>
@@ -214,7 +214,7 @@
       <section id="draft-screen" hidden aria-label="Pokémon draft">
         <div class="draft-heading">
           <div>
-            <p class="eyebrow">18 POKÉMON / 36 MOVES / SIX PICKS EACH</p>
+            <p class="eyebrow">20 POKÉMON / 40 MOVES / SIX PICKS EACH</p>
             <h1>Your pick. Their problem.</h1>
             <p class="muted" id="draft-order">
               A Pocket Tanks-style snake draft: Ember, River, River, Ember.
@@ -334,6 +334,26 @@
             <span id="stage-tag"></span
             ><span>TRAINER BATTLE / SIX PARTNERS</span>
           </div>
+          <div class="camera-controls" aria-label="Battlefield camera">
+            <button id="camera-out" title="Zoom out">−</button
+            ><button id="camera-in" title="Zoom toward the active trainer">
+              +</button
+            ><button id="camera-fit">Overview</button
+            ><button
+              id="camera-auto"
+              title="Overview while aiming; follow summons and shots"
+            >
+              Auto
+            </button>
+          </div>
+          <canvas
+            id="minimap"
+            width="400"
+            height="150"
+            aria-label="Battlefield minimap. Click to pan."
+            tabindex="0"
+            title="Click to pan · right-drag field to look around"
+          ></canvas>
           <div id="turn-banner" aria-live="polite"></div>
           <button id="guide-toggle" class="arena-button" aria-pressed="true">
             ◎ Aim guide
@@ -396,7 +416,7 @@
           </div>
           <span class="keyboard-hint"
             >Click field to aim · ← → elevation · ↑ ↓ power · F flip · Space
-            attack</span
+            attack · Right-drag pans · Mini-map inspects</span
           ><button id="pass" class="quiet">Pass turn</button>
         </div>
       </section>
@@ -421,7 +441,7 @@
           <h3>Move, then make your move.</h3>
           <p>
             Draft six Pokémon from the shared pool first. A/D moves, W jumps.
-            Each turn gives 125 movement points and one attack. A jump costs 18.
+            Each turn gives 180 movement points and one attack. A jump costs 18.
             Pick a partner with 1–6, then Q/E to choose its move.
           </p>
         </article>
@@ -434,7 +454,9 @@
             Hold Shift while clicking for direct aim. Flip direction with F.
             Dots show the predicted arc; a ring marks the impact when Full guide
             is enabled. The short guide shows only the launch. Power changes
-            arcs and relay landings, not beams. Space commits the attack.
+            arcs and relay landings. Beams and Octazooka have fixed power;
+            Dugtrio’s Dig uses facing. Space commits the attack. Zoom with +/−,
+            right-drag to pan, or click the minimap.
           </p>
         </article>
         <article>
@@ -443,8 +465,10 @@
           <p>
             Most moves use long-range arcs. Relay moves send a Poké Ball to its
             landing marker, then summon there. Hydro Pump pushes, Earthquake
-            breaks ground, Dig tunnels, salvos spread and clusters rain down.
-            Three charged beams cross the whole arena.
+            breaks mountains, Dugtrio tunnels you out of a pit, Mud Bomb builds
+            cover, salvos spread and clusters rain down. Octazooka needs a
+            direct hit for 100 damage; a near miss does zero. Three charged
+            beams cross the whole arena.
           </p>
         </article>
         <article>
@@ -453,17 +477,18 @@
           <p>
             Water wets for two enemy turns and extinguishes burns. Electricity
             deals 50% more to wet trainers. Fire burns for 4 HP on each of two
-            turns. Curse halves the rival’s next movement budget. Primaries have
-            three shots and secondaries two. Strong moves also recharge. Ice
-            slows targets; sludge poisons; Snarl weakens the next attack. Wet
-            ground conducts Thunderbolt and can be frozen into temporary
-            shelves. Ground labels show remaining turns. If all shots are
-            exhausted, remaining HP decides the winner.
+            turns. Curse halves the rival’s next movement budget. Uses and
+            recharge vary by move: inspect them before drafting. Water Spout
+            fills pits with up to eight 10-damage ticks, then drains; flat
+            ground spills it. Ice slows targets; sludge poisons; Snarl weakens
+            the next attack. Wet ground conducts Thunderbolt and can be frozen
+            into temporary shelves. Ground labels show remaining turns. If all
+            shots are exhausted, remaining HP decides the winner.
           </p>
         </article>
       </div>
       <p class="callout">
-        Trainers have 180–300 HP. Falls can hurt; the sea is fatal. Blast damage
+        Trainers have 250–500 HP. Falls can hurt; the sea is fatal. Blast damage
         fades with distance and is reduced by solid cover. Pokémon are summoned
         attackers and do not take damage in Trainer Battle.
       </p>

@@ -1,5 +1,5 @@
 import "./style.css";
-import { Battle, W, H, DT, RULES, traceShot } from "./simulation.js";
+import { Battle, W, H, VIEW_W, DT, RULES, traceShot } from "./simulation.js";
 import { roster, maps, BALLISTIC, difficultyProfiles } from "./content.js";
 import { creature } from "./art.js";
 import { Renderer, drawMapThumbnail, drawHero } from "./renderer.js";
@@ -20,7 +20,7 @@ import {
 const $ = (s) => document.querySelector(s),
   $$ = (s) => [...document.querySelectorAll(s)];
 const defaults = {
-  version: 2,
+  version: 3,
   sound: false,
   volume: 0.35,
   reduced: matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -30,7 +30,7 @@ const defaults = {
   history: true,
   landscape: "rolling",
   relief: "normal",
-  hp: 240,
+  hp: 350,
   profiles: [cleanProfile({}, 0), cleanProfile({}, 1)],
   map: "highlands",
   difficulty: "normal",
@@ -38,11 +38,12 @@ const defaults = {
 let saved = {};
 try {
   const value = JSON.parse(localStorage.getItem("battlefront.settings"));
-  if ([1, 2].includes(value?.version)) saved = value;
+  if ([1, 2, 3].includes(value?.version)) saved = value;
 } catch {
   /* Storage may be disabled. */
 }
-const prefs = { ...defaults, ...saved, version: 2 };
+const prefs = { ...defaults, ...saved, version: 3 };
+if (![250, 350, 500].includes(prefs.hp)) prefs.hp = 350;
 if (saved.version === 1) prefs.guideLength = "full";
 prefs.profiles = [0, 1].map((i) => cleanProfile(prefs.profiles?.[i], i));
 if (!landscapes.some((p) => p.id === prefs.landscape))
@@ -257,7 +258,7 @@ function buildMoves() {
     const button = document.createElement("button");
     button.className = "move-button";
     button.setAttribute("aria-label", m.name);
-    button.innerHTML = `<strong>${m.name}</strong><small>${m.kind === "salvo" ? `${m.damage} × ${m.count}` : `${m.damage} DMG`} · ${m.kind === "relay" ? "RELAY" : m.kind.toUpperCase()}</small><small class="cooldown"></small>`;
+    button.innerHTML = `<strong>${m.name}</strong><small>${m.damageText} · ${m.tier}</small><small class="cooldown"></small>`;
     button.onclick = () => chooseMove(i);
     $("#moves").append(button);
   });
@@ -281,7 +282,7 @@ function updateHUD() {
     m = roster[s.species].moves[s.move];
   if (shownSpecies !== s.species) buildMoves();
   battle.players.forEach((player, i) => {
-    const signature = `${player.hp}|${player.wet}|${player.burn}|${player.curse}|${player.poison}|${player.chill}|${player.weaken}|${battle.active}|${player.name}|${battle.turn}`;
+    const signature = `${player.hp}|${player.muddy}|${player.wet}|${player.burn}|${player.curse}|${player.poison}|${player.chill}|${player.weaken}|${battle.active}|${player.name}|${battle.turn}`;
     const el = $(`#p${i}`);
     el.classList.toggle(
       "active",
@@ -295,7 +296,7 @@ function updateHUD() {
           : i === 1 && battle.options.mode === "practice"
             ? "PRACTICE TARGET"
             : `PLAYER ${i + 1}`;
-      el.innerHTML = `<div class="name-row"><span class="player-name">${i ? "◆" : "●"} ${player.name}</span><span class="hp-value">${player.hp} <small>/ ${battle.maxHP} HP</small></span></div><div class="health-track" role="meter" aria-label="${player.name} health" aria-valuemin="0" aria-valuemax="${battle.maxHP}" aria-valuenow="${player.hp}"><i style="width:${(player.hp / battle.maxHP) * 100}%"></i></div><div class="status-row"><span>${opponent}</span>${player.wet ? `<span class="status-pill">WET ${player.wet}</span>` : ""}${player.burn ? `<span class="status-pill">BURN ${player.burn}</span>` : ""}${player.curse ? '<span class="status-pill">CURSED</span>' : ""}${player.poison ? `<span class="status-pill">POISON ${player.poison}</span>` : ""}${player.chill ? '<span class="status-pill">CHILLED</span>' : ""}${player.weaken ? '<span class="status-pill">WEAKENED</span>' : ""}</div>`;
+      el.innerHTML = `<div class="name-row"><span class="player-name">${i ? "◆" : "●"} ${player.name}</span><span class="hp-value">${player.hp} <small>/ ${battle.maxHP} HP</small></span></div><div class="health-track" role="meter" aria-label="${player.name} health" aria-valuemin="0" aria-valuemax="${battle.maxHP}" aria-valuenow="${player.hp}"><i style="width:${(player.hp / battle.maxHP) * 100}%"></i></div><div class="status-row"><span>${opponent}</span>${player.wet ? `<span class="status-pill">WET ${player.wet}</span>` : ""}${player.burn ? `<span class="status-pill">BURN ${player.burn}</span>` : ""}${player.curse ? '<span class="status-pill">CURSED</span>' : ""}${player.poison ? `<span class="status-pill">POISON ${player.poison}</span>` : ""}${player.chill ? '<span class="status-pill">CHILLED</span>' : ""}${player.weaken ? '<span class="status-pill">WEAKENED</span>' : ""}${player.muddy ? '<span class="status-pill">MUDDY</span>' : ""}</div>`;
     }
   });
   $("#turn-label").textContent = `TURN ${String(battle.turn).padStart(2, "0")}`;
@@ -355,10 +356,10 @@ function updateHUD() {
   $("#angle-value").textContent = `${Math.round(+$("#angle").value)}°`;
   $("#power").value = s.power;
   $("#power-value").textContent = `${Math.round(s.power)}%`;
-  const usesPower = BALLISTIC.has(m.kind);
+  const usesPower = BALLISTIC.has(m.kind) && !m.velocity;
   $("#power").disabled = !canInput() || !usesPower;
   $("#power-label").style.opacity = usesPower ? "1" : ".4";
-  $("#angle").disabled = !canInput();
+  $("#angle").disabled = !canInput() || m.kind === "utility";
   $("#face-left").classList.toggle("selected", s.facing === -1);
   $("#face-right").classList.toggle("selected", s.facing === 1);
   $("#face-left").disabled = $("#face-right").disabled = !canInput();
@@ -375,7 +376,11 @@ function updateHUD() {
           ? `Recharges in ${cd} turn${cd === 1 ? "" : "s"}. Choose another.`
           : usesPower
             ? `${p.ammo[m.id]} shots left · SPACE to commit`
-            : "Full-arena beam · power fixed · SPACE to commit";
+            : m.kind === "utility"
+              ? "Local rescue · choose facing · SPACE to commit"
+              : m.directOnly
+                ? "100 damage only on direct body hit · power fixed"
+                : "Beam · power fixed · SPACE to commit";
   $("#pass").disabled = !canInput();
   ["#move-left", "#move-right", "#jump"].forEach((id) => {
     $(id).disabled = !canInput() || battle.budget <= 0;
@@ -615,7 +620,7 @@ function renderDraft() {
     button.dataset.species = index;
     button.disabled = cpu;
     button.setAttribute("aria-label", `Inspect ${s.name}`);
-    button.innerHTML = `<span class="draft-type">${s.element}</span><img src="${spriteURL(s.id)}" alt="" draggable="false"><strong>${s.name}</strong><small>${s.role}</small><span class="draft-moves">${s.moves.map((m) => m.name).join(" / ")}</span>${picked ? `<span class="picked-label">${draftOptions.profiles[draft.teams[0].includes(index) ? 0 : 1].name.toUpperCase()} PICK</span>` : ""}`;
+    button.innerHTML = `<span class="draft-type">${s.element}</span><img src="${spriteURL(s.id)}" alt="" draggable="false"><strong>${s.name}</strong><small>${s.role}</small><span class="draft-moves">${s.moves.map((m) => m.name + " · " + m.damageText).join(" / ")}</span>${picked ? `<span class="picked-label">${draftOptions.profiles[draft.teams[0].includes(index) ? 0 : 1].name.toUpperCase()} PICK</span>` : ""}`;
     button.onclick = () => {
       inspectSpecies(index);
     };
@@ -784,7 +789,7 @@ function pointerAim(e) {
   if (!canInput()) return;
   const rect = $("#game").getBoundingClientRect(),
     point = renderer.worldPoint(
-      ((e.clientX - rect.left) * W) / rect.width,
+      ((e.clientX - rect.left) * $("#game").width) / rect.width,
       ((e.clientY - rect.top) * $("#game").height) / rect.height,
     ),
     x = point.x,
@@ -801,13 +806,43 @@ function pointerAim(e) {
       (Math.atan2(p.y - 42 - y, Math.abs(x - p.x)) * 180) / Math.PI;
     setElevation(elevation);
     s.power = Math.round(
-      Math.max(20, Math.min(100, Math.hypot(x - p.x, y - p.y) / 4.5)),
+      Math.max(20, Math.min(100, Math.hypot(x - p.x, y - p.y) / 15)),
     );
   }
   p.facing = s.facing;
   updateHUD();
 }
+let panPointer = null;
+$("#game").addEventListener("contextmenu", (e) => e.preventDefault());
+$("#game").addEventListener("pointerup", () => {
+  panPointer = null;
+});
+$("#game").addEventListener("pointercancel", () => {
+  panPointer = null;
+});
+$("#camera-in").onclick = () => {
+  if (battle) renderer.zoomBy(1.3, battle);
+};
+$("#camera-out").onclick = () => {
+  if (battle) renderer.zoomBy(1 / 1.3, battle);
+};
+$("#camera-fit").onclick = () => renderer.cameraMode("overview");
+$("#camera-auto").onclick = () => renderer.cameraMode("auto");
+$("#minimap").onclick = (e) => {
+  if (!battle) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  renderer.panTo(
+    ((e.clientX - r.left) / r.width) * W,
+    ((e.clientY - r.top) / r.height) * H,
+  );
+};
 $("#game").addEventListener("pointerdown", (e) => {
+  if (e.button === 2) {
+    e.preventDefault();
+    panPointer = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    return;
+  }
   if (!canInput()) return;
   e.preventDefault();
   $("#game").focus({ preventScroll: true });
@@ -815,6 +850,15 @@ $("#game").addEventListener("pointerdown", (e) => {
   pointerAim(e);
 });
 $("#game").addEventListener("pointermove", (e) => {
+  if (e.buttons === 2 && panPointer) {
+    const r = e.currentTarget.getBoundingClientRect();
+    renderer.panBy(
+      ((e.clientX - panPointer.x) * VIEW_W) / r.width,
+      ((e.clientY - panPointer.y) * e.currentTarget.height) / r.height,
+    );
+    panPointer = { x: e.clientX, y: e.clientY };
+    return;
+  }
   if (e.buttons === 1) pointerAim(e);
 });
 $("#fullscreen").onclick = async () => {
@@ -1015,7 +1059,7 @@ function updateInspector() {
       resetDemo();
     };
   $("#inspect-details").innerHTML =
-    `<p class="move-facts">${m.family.toUpperCase()} · ${m.damage}${m.count ? " × " + m.count : ""} BASE · ${m.ammo} USES</p><p>${m.description}</p><p><strong>Ground:</strong> ${m.terrain}</p><p class="muted">${m.counter}${m.cooldown ? " Recharge: " + m.cooldown + " owner turn" + (m.cooldown === 1 ? "" : "s") + "." : ""}</p>`;
+    `<p class="move-facts">${m.family.toUpperCase()} · ${m.tier} · ${m.damageText} · ${m.ammo} USES</p><p>${m.description}</p><p><strong>Ground:</strong> ${m.terrain}</p><p class="muted">${m.counter}${m.cooldown ? " Recharge: " + m.cooldown + " owner turn" + (m.cooldown === 1 ? "" : "s") + "." : ""}</p>`;
   const cpu = draft.mode !== "hotseat" && draft.active === 1,
     picked = draft.picks.includes(inspected);
   $("#draft-confirm").disabled = draft.complete || cpu || picked;
@@ -1039,10 +1083,19 @@ function resetDemo() {
     timer: false,
     mode: "practice",
     teams: [[inspected], [1]],
-    hp: 300,
+    hp: 500,
     profiles: draftOptions.profiles,
   });
-  for (let i = 0; i < 30; i++) demo.step();
+  const previewMove = roster[inspected].moves[inspectMove];
+  if (previewMove.behavior === "flood") {
+    const p = demo.players[1];
+    demo.terrain.circle(p.x, p.y + 60, 120);
+  }
+  if (previewMove.kind === "utility") {
+    const p = demo.players[0];
+    demo.terrain.circle(p.x, p.y + 60, 120);
+  }
+  for (let i = 0; i < 150; i++) demo.step();
   demo.wind = 0;
   const target = demo.players[1],
     aim = aimAt(demo, roster[inspected].moves[inspectMove], target.x, target.y);
@@ -1072,7 +1125,7 @@ $("#reroll-map").onclick = () => {
   $("#seed").value = 1 + Math.floor(Math.random() * 999998);
   buildMaps();
 };
-$("#match-hp").value = [180, 240, 300].includes(prefs.hp) ? prefs.hp : 240;
+$("#match-hp").value = [250, 350, 500].includes(prefs.hp) ? prefs.hp : 350;
 $("#aim-style").value = prefs.targeting ? "assisted" : "classic";
 $("#aim-style").onchange = (e) => {
   prefs.targeting = e.target.value === "assisted";
@@ -1146,7 +1199,7 @@ $("#learn").onclick = () => {
     landscape: "rolling",
     mode: "practice",
     timer: false,
-    hp: 300,
+    hp: 500,
     teams: [[0, 1, 2, 3, 6, 17], [1]],
     profiles: prefs.profiles,
   });
@@ -1173,7 +1226,7 @@ $("#start").disabled = true;
 loadSprites()
   .then(() => {
     $("#asset-status").textContent =
-      "18 original animated sprites loaded · works offline";
+      `${roster.length} original animated sprites loaded · works offline`;
     $("#start").disabled = false;
   })
   .catch((error) => {
@@ -1211,6 +1264,14 @@ window.battlefront = {
           log: [...battle.log],
           winner: battle.winner,
           maxHP: battle.maxHP,
+          world: { width: W, height: H },
+          pools: battle.pools.map((p) => ({
+            x: p.x,
+            y: p.y,
+            age: p.age,
+            pulses: p.pulses,
+            damage: [...p.damage],
+          })),
           opening: battle.opening,
           profiles: battle.players.map((p) => ({ ...p.profile })),
           landscape: battle.terrain.profile,
